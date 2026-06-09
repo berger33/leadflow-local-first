@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  waha:
+    image: devlikeapro/waha
+    ports:
+      - "3000:3000"
+    environment:
+      - WHATSAPP_API_KEY=sua_chave_segura
+    restart: always
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama:/root/.ollama
+    restart: always
