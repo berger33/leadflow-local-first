@@ -66,12 +66,16 @@ flowchart LR
     N --> W
 ```
 
-| Serviço | Responsabilidade | Porta |
+| Serviço | Responsabilidade | Porta local |
 | --- | --- | ---: |
 | **LeadFlow Assistant** | API, pesquisa, memória, Agente 1 e Agente 2 | `8000` |
 | **Ollama** | execução local da LLM | `11434` |
 | **WAHA** | conexão HTTP/Webhook com WhatsApp | `3000` |
 | **n8n** | agenda, automação, Gmail e integrações | `5678` |
+
+As portas são vinculadas a **`127.0.0.1`**, não a todas as interfaces da máquina. A comunicação entre containers ocorre pela rede privada do Docker.
+
+Para tornar a entrega reproduzível, o Compose fixa as versões de infraestrutura usadas pela versão 1.0: **Ollama 0.32.6**, **WAHA `latest-2026.7.2`** e **n8n 2.33.5**.
 
 Arquitetura detalhada: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 
@@ -114,11 +118,13 @@ O script:
 
 1. verifica se o Docker está instalado e ativo;
 2. cria `.env` automaticamente se necessário;
-3. gera segredos locais aleatórios;
-4. constrói o serviço Python;
-5. inicia Ollama, WAHA, n8n e LeadFlow;
-6. baixa o modelo local configurado;
-7. abre os painéis necessários.
+3. gera segredos locais aleatórios em UTF-8 sem BOM;
+4. valida a configuração do Docker Compose;
+5. constrói o serviço Python;
+6. inicia Ollama e baixa o modelo local configurado;
+7. só inicia o Assistente depois que o modelo estiver disponível;
+8. só inicia WAHA e n8n depois que a API estiver saudável;
+9. abre os painéis necessários.
 
 Na primeira execução, o download do modelo pode levar alguns minutos.
 
@@ -178,7 +184,7 @@ ou importe manualmente os JSON da pasta [`n8n/workflows`](n8n/workflows).
 
 | Workflow | Função |
 | --- | --- |
-| `daily-technology-news.json` | pesquisa diária → dual-agent → relatório → Gmail |
+| `daily-technology-news.json` | pesquisa diária → dual-agent → relatório HTML → Gmail |
 | `research-on-demand.json` | pesquisa sob demanda exposta por webhook n8n |
 | `daily-whatsapp-summary.json` | resumo diário opcional enviado ao WhatsApp |
 
@@ -188,13 +194,39 @@ O projeto não versiona credenciais Google.
 
 No workflow **LeadFlow - Relatório diário de tecnologia**, abra o node **Enviar relatório pelo Gmail** e conecte sua credencial Gmail uma única vez.
 
+O node é entregue explicitamente como `resource=message`, `operation=send` e `emailType=html`, deixando apenas a credencial pessoal para configuração.
+
 Instruções: [`docs/GMAIL_N8N.md`](docs/GMAIL_N8N.md).
 
 ---
 
-# Testando
+# Usando pelo WhatsApp
 
-## Conversa local pela API
+Depois de parear a sessão, basta mandar mensagens para o WhatsApp conectado.
+
+### Detecção automática
+
+Perguntas contendo sinais de atualidade como **hoje**, **agora**, **notícias**, **preço**, **cotação**, **resultado**, **pesquise** ou equivalentes acionam a pesquisa web automaticamente.
+
+### Forçar internet
+
+```text
+/web qual é a cotação do dólar agora?
+```
+
+O prefixo é removido antes da busca. O Assistente obrigatoriamente tenta obter contexto da internet e o Agente Validador recebe as fontes encontradas.
+
+### Forçar somente a LLM local
+
+```text
+/local explique recursão em Python
+```
+
+Nesse caso nenhuma pesquisa web é feita, mesmo que a frase contenha termos que normalmente ativariam a internet.
+
+---
+
+# Testando pela API
 
 Abra:
 
@@ -252,7 +284,7 @@ A **LLM continua local**. Ela não navega sozinha.
 
 Quando uma pergunta depende de informação recente, o LeadFlow:
 
-1. identifica a necessidade de pesquisa;
+1. identifica a necessidade de pesquisa ou recebe o comando `/web`;
 2. usa DDGS para consultar metabuscadores públicos;
 3. fornece títulos, snippets e URLs ao Agente 1;
 4. exige que a resposta atual cite essas fontes;
@@ -309,11 +341,12 @@ Se ficar vazio, qualquer conversa privada recebida pela conta conectada poderá 
 - a memória fica em SQLite local;
 - LLM e prompts rodam localmente no Ollama;
 - um segundo agente revisa a resposta antes do envio;
-- os serviços foram desenhados para uso em `localhost`/rede confiável.
-
-**Não exponha diretamente as portas `3000`, `5678`, `8000` ou `11434` na internet sem reverse proxy, HTTPS, firewall e revisão de segurança.**
+- todas as portas publicadas ficam presas a `127.0.0.1`;
+- os serviços foram desenhados para uso local/rede Docker confiável.
 
 A WAHA usa automação sobre WhatsApp Web; esse tipo de integração não é a API oficial WhatsApp Business e pode ter riscos de bloqueio. Use de forma responsável.
+
+Leia também [`SECURITY.md`](SECURITY.md).
 
 ---
 
@@ -341,9 +374,16 @@ Guia: [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 
 # Testes e CI
 
+A validação local da lógica da versão final resultou em:
+
+```text
+10 passed
+```
+
 Os testes cobrem:
 
-- detecção de pergunta que necessita web;
+- detecção automática de pergunta que necessita web;
+- comandos `/web` e `/local`;
 - chamada independente do segundo agente;
 - resposta com fontes;
 - geração de relatório pronto para Gmail;
@@ -360,6 +400,8 @@ python -m pytest -q
 
 O GitHub Actions valida testes, JSON dos workflows e sintaxe do Docker Compose a cada push.
 
+Escopo de validação e checklist para uma instalação nova: [`docs/VALIDACAO.md`](docs/VALIDACAO.md).
+
 ---
 
 # Estrutura do repositório
@@ -367,7 +409,7 @@ O GitHub Actions valida testes, JSON dos workflows e sintaxe do Docker Compose a
 ```text
 leadflow-local-first/
 ├── app/
-│   ├── agents.py             # Agente 1 + Agente 2
+│   ├── agents.py             # Agente 1 + Agente 2 + roteamento web/local
 │   ├── config.py             # configuração por ambiente
 │   ├── main.py               # FastAPI / endpoints / webhook WAHA
 │   ├── memory.py             # memória SQLite
@@ -387,7 +429,10 @@ leadflow-local-first/
 ├── .env.example
 ├── INICIAR_WINDOWS.bat
 ├── IMPORTAR_WORKFLOWS_WINDOWS.bat
-└── DIAGNOSTICO_WINDOWS.bat
+├── DIAGNOSTICO_WINDOWS.bat
+├── SECURITY.md
+├── CHANGELOG.md
+└── LICENSE
 ```
 
 ---
@@ -410,6 +455,10 @@ A segunda chamada usa um prompt e objetivo diferentes: ela não continua a conve
 
 Reduz a diferença entre “funciona no meu PC” e “funciona no computador de quem clonou”. O host precisa essencialmente de Docker, não de Python, Node, n8n e Ollama instalados manualmente.
 
+### Por que versões fixadas?
+
+Porque um portfólio entregável deve ser reproduzível. Atualizações de infraestrutura passam a ser uma decisão explícita, em vez de acontecerem silenciosamente a cada `docker pull`.
+
 ---
 
 # Limitações conhecidas
@@ -422,6 +471,17 @@ Reduz a diferença entre “funciona no meu PC” e “funciona no computador de
 - a versão 1.0 foi pensada para **uso pessoal/local**, não como SaaS multiusuário exposto publicamente.
 
 ---
+
+## Documentação da versão
+
+- [Arquitetura](docs/ARQUITETURA.md)
+- [Requisitos](docs/REQUISITOS.md)
+- [Configuração Gmail/n8n](docs/GMAIL_N8N.md)
+- [Validação](docs/VALIDACAO.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Segurança](SECURITY.md)
+- [Changelog](CHANGELOG.md)
+- [Licença MIT](LICENSE)
 
 ## Tecnologias
 
