@@ -1,19 +1,111 @@
 services:
-  waha:
-    image: devlikeapro/waha
-    ports:
-      - "3000:3000"
-    environment:
-      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY:?defina WHATSAPP_API_KEY no arquivo .env}
-    restart: unless-stopped
-
   ollama:
-    image: ollama/ollama
+    image: ollama/ollama:latest
+    container_name: leadflow-ollama
     ports:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: leadflow-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        ollama pull ${OLLAMA_MODEL:-qwen3:4b} &&
+        if [ "${OLLAMA_VALIDATOR_MODEL:-qwen3:4b}" != "${OLLAMA_MODEL:-qwen3:4b}" ]; then
+          ollama pull ${OLLAMA_VALIDATOR_MODEL:-qwen3:4b};
+        fi
+    restart: "no"
+
+  assistant:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: leadflow-assistant
+    depends_on:
+      ollama:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      WAHA_BASE_URL: http://waha:3000
+      DATABASE_PATH: /data/leadflow.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - assistant_data:/data
+    restart: unless-stopped
+
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: leadflow-waha
+    env_file:
+      - .env
+    environment:
+      WAHA_API_KEY: ${WAHA_API_KEY}
+      WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME}
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD}
+      WAHA_API_KEY_EXCLUDE_PATH: health,ping
+      WHATSAPP_HOOK_URL: http://assistant:8000/webhooks/waha
+      WHATSAPP_HOOK_EVENTS: message
+      WHATSAPP_HOOK_RETRIES_POLICY: linear
+      WHATSAPP_HOOK_RETRIES_DELAY_SECONDS: 2
+      WHATSAPP_HOOK_RETRIES_ATTEMPTS: 5
+    ports:
+      - "3000:3000"
+    volumes:
+      - waha_sessions:/app/.sessions
+    depends_on:
+      assistant:
+        condition: service_started
+    restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: leadflow-n8n
+    env_file:
+      - .env
+    environment:
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-America/Sao_Paulo}
+      TZ: ${GENERIC_TIMEZONE:-America/Sao_Paulo}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      GMAIL_REPORT_TO: ${GMAIL_REPORT_TO}
+      DAILY_NEWS_QUERY: ${DAILY_NEWS_QUERY}
+      DAILY_NEWS_CRON: ${DAILY_NEWS_CRON:-0 8 * * *}
+      ASSISTANT_INTERNAL_URL: http://assistant:8000
+      WAHA_INTERNAL_URL: http://waha:3000
+      WAHA_API_KEY: ${WAHA_API_KEY}
+      WAHA_SESSION: ${WAHA_SESSION:-default}
+      REPORT_WHATSAPP_CHAT_ID: ${REPORT_WHATSAPP_CHAT_ID:-}
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+    depends_on:
+      assistant:
+        condition: service_started
+    restart: unless-stopped
 
 volumes:
   ollama_data:
+  assistant_data:
+  waha_sessions:
+  n8n_data:
