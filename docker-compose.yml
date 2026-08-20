@@ -74,7 +74,7 @@ services:
       - waha_sessions:/app/.sessions
     depends_on:
       assistant:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
   n8n:
@@ -103,7 +103,7 @@ services:
       - ./n8n/workflows:/workflows:ro
     depends_on:
       assistant:
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
