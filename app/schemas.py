@@ -19,14 +19,14 @@ class ChatRequest(BaseModel):
 class ValidationResult(BaseModel):
     approved: bool
     score: float = Field(ge=0, le=1)
-    issues: list[str] = []
+    issues: list[str] = Field(default_factory=list)
     corrected_answer: str = ''
 
 
 class ChatResponse(BaseModel):
     answer: str
     used_web: bool
-    sources: list[Source] = []
+    sources: list[Source] = Field(default_factory=list)
     validation: ValidationResult
     model: str
     validator_model: str
