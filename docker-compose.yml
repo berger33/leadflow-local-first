@@ -39,6 +39,8 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
     env_file:
       - .env
     environment:
