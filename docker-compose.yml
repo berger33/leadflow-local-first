@@ -3,7 +3,7 @@ services:
     image: ollama/ollama:latest
     container_name: leadflow-ollama
     ports:
-      - "11434:11434"
+      - "127.0.0.1:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
@@ -48,7 +48,7 @@ services:
       WAHA_BASE_URL: http://waha:3000
       DATABASE_PATH: /data/leadflow.db
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - assistant_data:/data
     restart: unless-stopped
@@ -69,7 +69,7 @@ services:
       WHATSAPP_HOOK_RETRIES_DELAY_SECONDS: 2
       WHATSAPP_HOOK_RETRIES_ATTEMPTS: 5
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - waha_sessions:/app/.sessions
     depends_on:
@@ -97,7 +97,7 @@ services:
       WAHA_SESSION: ${WAHA_SESSION:-default}
       REPORT_WHATSAPP_CHAT_ID: ${REPORT_WHATSAPP_CHAT_ID:-}
     ports:
-      - "5678:5678"
+      - "127.0.0.1:5678:5678"
     volumes:
       - n8n_data:/home/node/.n8n
       - ./n8n/workflows:/workflows:ro
