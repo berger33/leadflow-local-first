@@ -47,8 +47,11 @@
     },
     {
       "parameters": {
+        "resource": "message",
+        "operation": "send",
         "sendTo": "={{ $env.GMAIL_REPORT_TO }}",
         "subject": "={{ 'LeadFlow | 10 notícias de tecnologia | ' + $now.format('dd/MM/yyyy') }}",
+        "emailType": "html",
         "message": "={{ $json.report_html }}",
         "options": {
           "appendAttribution": false
