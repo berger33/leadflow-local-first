@@ -23,6 +23,19 @@ def should_use_web(message: str) -> bool:
     return bool(tokens & WEB_HINTS)
 
 
+def parse_web_command(message: str) -> tuple[str, bool | None]:
+    """Remove comandos opcionais /web e /local usados no WhatsApp/API."""
+    stripped = message.strip()
+    lowered = stripped.lower()
+    for prefix, web in (('/web', True), ('/local', False)):
+        if lowered == prefix:
+            return stripped, web
+        if lowered.startswith(prefix + ' ') or lowered.startswith(prefix + ':'):
+            cleaned = stripped[len(prefix):].lstrip(' :')
+            return cleaned or stripped, web
+    return stripped, None
+
+
 def _sources_context(sources: list[Source]) -> str:
     if not sources:
         return ''
@@ -111,12 +124,19 @@ class DualAgentService:
         return _parse_validation(raw, draft)
 
     async def answer(self, message: str, chat_id: str, use_web: bool | None = None) -> ChatResponse:
-        web = should_use_web(message) if use_web is None else use_web
+        clean_message, command_override = parse_web_command(message)
+        if use_web is not None:
+            web = use_web
+        elif command_override is not None:
+            web = command_override
+        else:
+            web = should_use_web(clean_message)
+
         sources: list[Source] = []
         if web:
             try:
                 sources = await self.search.search_text(
-                    message,
+                    clean_message,
                     limit=min(self.settings.web_search_max_results, 8),
                     timelimit='w',
                 )
@@ -137,19 +157,19 @@ class DualAgentService:
         messages.extend(history)
         if context:
             messages.append({'role': 'system', 'content': f'CONTEXTO WEB ATUAL:\n{context}'})
-        messages.append({'role': 'user', 'content': message})
+        messages.append({'role': 'user', 'content': clean_message})
 
         draft = await self.llm.chat(
             self.settings.ollama_model,
             messages,
             temperature=0.25,
         )
-        validation = await self._validate(message, draft, sources)
+        validation = await self._validate(clean_message, draft, sources)
         final = draft
         if (not validation.approved or validation.score < self.settings.validator_min_score) and validation.corrected_answer:
             final = validation.corrected_answer
 
-        self.memory.add(chat_id, 'user', message)
+        self.memory.add(chat_id, 'user', clean_message)
         self.memory.add(chat_id, 'assistant', final)
         return ChatResponse(
             answer=final,
