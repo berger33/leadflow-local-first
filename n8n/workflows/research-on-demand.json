@@ -1,0 +1,65 @@
+{
+  "name": "LeadFlow - Pesquisa sob demanda via webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "leadflow-research",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-research",
+      "name": "Receber pedido de pesquisa",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 320],
+      "webhookId": "leadflow-research"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ASSISTANT_INTERNAL_URL + '/research' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{"name": "Content-Type", "value": "application/json"}]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ query: $json.body?.query || $json.query || 'notícias de tecnologia', limit: Number($json.body?.limit || 10), kind: $json.body?.kind || 'news', timelimit: $json.body?.timelimit || 'd', language: 'pt-BR' }) }}",
+        "options": {"timeout": 300000}
+      },
+      "id": "research-request",
+      "name": "Executar pesquisa validada",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 320]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond",
+      "name": "Responder resultado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [760, 320]
+    }
+  ],
+  "connections": {
+    "Receber pedido de pesquisa": {
+      "main": [[{"node": "Executar pesquisa validada", "type": "main", "index": 0}]]
+    },
+    "Executar pesquisa validada": {
+      "main": [[{"node": "Responder resultado", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "versionId": "8cd35d50-138c-41ef-8c02-58a9eef63c5c",
+  "meta": {},
+  "tags": []
+}
