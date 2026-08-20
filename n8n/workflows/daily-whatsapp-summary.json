@@ -1,0 +1,89 @@
+{
+  "name": "LeadFlow - Resumo diário opcional no WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {"interval": [{"field": "cronExpression", "expression": "15 8 * * *"}]}
+      },
+      "id": "schedule-whatsapp",
+      "name": "Diariamente 08:15",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 320]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
+          "conditions": [
+            {
+              "id": "chat-configured",
+              "leftValue": "={{ $env.REPORT_WHATSAPP_CHAT_ID }}",
+              "rightValue": "",
+              "operator": {"type": "string", "operation": "notEmpty", "singleValue": true}
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-chat",
+      "name": "WhatsApp configurado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [470, 320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ASSISTANT_INTERNAL_URL + '/research' }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/json"}]},
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ query: '5 notícias mais relevantes de ' + ($env.DAILY_NEWS_QUERY || 'tecnologia') + ' nas últimas 24 horas', limit: 5, kind: 'news', timelimit: 'd', language: 'pt-BR' }) }}",
+        "options": {"timeout": 300000}
+      },
+      "id": "research-whatsapp",
+      "name": "Gerar resumo validado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 260]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WAHA_INTERNAL_URL + '/api/sendText' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "X-Api-Key", "value": "={{ $env.WAHA_API_KEY }}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ session: $env.WAHA_SESSION || 'default', chatId: $env.REPORT_WHATSAPP_CHAT_ID, text: $json.whatsapp_summary }) }}",
+        "options": {}
+      },
+      "id": "send-whatsapp",
+      "name": "Enviar pelo WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [980, 260]
+    }
+  ],
+  "connections": {
+    "Diariamente 08:15": {"main": [[{"node": "WhatsApp configurado?", "type": "main", "index": 0}]]},
+    "WhatsApp configurado?": {"main": [[{"node": "Gerar resumo validado", "type": "main", "index": 0}], []]},
+    "Gerar resumo validado": {"main": [[{"node": "Enviar pelo WhatsApp", "type": "main", "index": 0}]]}
+  },
+  "pinData": {},
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "versionId": "1b19102c-8e30-4404-b9ec-9ad47560d1dd",
+  "meta": {},
+  "tags": []
+}
