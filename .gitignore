@@ -1,1 +1,13 @@
 .env
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.db
+*.sqlite3
+.DS_Store
+.vscode/
+.idea/
+n8n_data/
+waha_sessions/
+ollama_data/
