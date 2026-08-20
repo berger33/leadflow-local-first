@@ -1,6 +1,6 @@
 services:
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.32.6
     container_name: leadflow-ollama
     ports:
       - "127.0.0.1:11434:11434"
@@ -15,7 +15,7 @@ services:
       start_period: 10s
 
   ollama-init:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.32.6
     container_name: leadflow-ollama-init
     depends_on:
       ollama:
@@ -54,7 +54,7 @@ services:
     restart: unless-stopped
 
   waha:
-    image: devlikeapro/waha:latest
+    image: devlikeapro/waha:latest-2026.7.2
     container_name: leadflow-waha
     env_file:
       - .env
@@ -78,7 +78,7 @@ services:
     restart: unless-stopped
 
   n8n:
-    image: n8nio/n8n:latest
+    image: n8nio/n8n:2.33.5
     container_name: leadflow-n8n
     env_file:
       - .env
