@@ -7,12 +7,14 @@ Este documento separa o que foi validado automaticamente do que, por depender da
 A versão 1.0 foi submetida a testes automatizados da lógica de aplicação:
 
 ```text
-7 passed
+10 passed
 ```
 
 Cobertura funcional dos testes:
 
-- detecção de perguntas que precisam de informação atual da internet;
+- detecção automática de perguntas que precisam de informação atual da internet;
+- comandos explícitos `/web` e `/local` para controlar o uso da internet;
+- remoção do comando `/web` antes de enviar a consulta ao buscador;
 - execução do Agente 1 e chamada independente do Agente 2 Validador;
 - aprovação e score estruturado da validação;
 - inclusão de fontes em respostas com pesquisa web;
@@ -56,6 +58,8 @@ Depois da primeira configuração:
 - [ ] o dashboard WAHA mostra a sessão `default` operacional;
 - [ ] uma mensagem privada enviada ao WhatsApp conectado recebe resposta;
 - [ ] uma pergunta contendo “hoje”, “notícias”, “pesquise” ou equivalente retorna fontes atuais;
+- [ ] `/web sua pergunta` força pesquisa e retorna fontes quando disponíveis;
+- [ ] `/local sua pergunta` responde sem consultar a internet;
 - [ ] `scripts/test-research.ps1` retorna relatório + fontes + validação;
 - [ ] execução manual do workflow diário envia um e-mail ao endereço configurado;
 - [ ] após a execução manual bem-sucedida, o workflow pode ser ativado para rodar diariamente.
