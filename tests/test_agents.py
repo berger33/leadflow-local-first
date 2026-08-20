@@ -1,7 +1,7 @@
 import json
 import pytest
 
-from app.agents import DualAgentService, should_use_web
+from app.agents import DualAgentService, parse_web_command, should_use_web
 from app.config import Settings
 from app.memory import ConversationMemory
 from app.schemas import Source
@@ -19,7 +19,11 @@ class FakeLLM:
 
 
 class FakeSearch:
+    def __init__(self):
+        self.last_query = None
+
     async def search_text(self, query, limit=8, timelimit=None):
+        self.last_query = query
         return [Source(title='Fonte A', url='https://example.com/a', snippet='Contexto atual')]
 
     async def search_news(self, query, limit=10, timelimit='d'):
@@ -35,6 +39,12 @@ def service(tmp_path):
 def test_detects_current_information_need():
     assert should_use_web('Quais são as notícias de tecnologia de hoje?') is True
     assert should_use_web('Explique o que é uma API REST') is False
+
+
+def test_explicit_web_and_local_commands():
+    assert parse_web_command('/web preço do dólar') == ('preço do dólar', True)
+    assert parse_web_command('/local explique recursão') == ('explique recursão', False)
+    assert parse_web_command('explique recursão') == ('explique recursão', None)
 
 
 @pytest.mark.asyncio
@@ -53,6 +63,19 @@ async def test_web_answer_includes_sources(service):
     assert response.used_web is True
     assert len(response.sources) == 1
     assert response.sources[0].url == 'https://example.com/a'
+
+
+@pytest.mark.asyncio
+async def test_web_command_forces_search_and_is_not_sent_as_query(service):
+    response = await service.answer('/web quem venceu o jogo?', 'test-chat')
+    assert response.used_web is True
+    assert service.search.last_query == 'quem venceu o jogo?'
+
+
+@pytest.mark.asyncio
+async def test_local_command_disables_automatic_search(service):
+    response = await service.answer('/local notícias de hoje', 'test-chat')
+    assert response.used_web is False
 
 
 @pytest.mark.asyncio
