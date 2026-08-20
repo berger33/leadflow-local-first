@@ -3,55 +3,54 @@
 **Assistente de IA no WhatsApp com LLM local, pesquisa na internet, automações n8n, relatórios por Gmail e validação por um segundo agente.**
 
 > **Status: versão 1.0 — projeto funcional e entregável.**
->
-> O objetivo é permitir que uma pessoa rode um assistente no próprio computador, converse com ele pelo WhatsApp e automatize pesquisas recorrentes sem depender de uma API paga de LLM.
 
-## O problema que este projeto resolve
+## ▶️ Demo online — experimente sem instalar
 
-Assistentes de IA normalmente exigem uma combinação de serviços SaaS, APIs pagas e dados enviados para terceiros. O LeadFlow usa uma arquitetura **local-first**: a inferência principal acontece no computador do usuário, mas o sistema continua capaz de consultar informações atuais na internet e executar automações programadas.
+**[Abrir a demo interativa do LeadFlow](https://htmlpreview.github.io/?https://github.com/berger33/leadflow-local-first/blob/main/demo/index.html)**
 
-Exemplos de uso:
+A demo pública permite navegar pela experiência do produto, testar comandos `/web` e `/local`, acompanhar visualmente o pipeline **Roteador → Pesquisa → Agente 1 → Agente 2 → Resposta final** e gerar uma prévia do relatório diário. O fluxo de notícias consulta uma fonte pública de tecnologia em tempo real.
 
-- perguntar qualquer coisa pelo WhatsApp e receber a resposta da LLM local;
-- perguntar **“quais foram as principais notícias de IA hoje?”** e receber uma resposta baseada em pesquisa web;
-- executar todo dia uma pesquisa sobre as **10 notícias mais quentes em tecnologia**;
-- gerar um relatório estruturado, revisado por um segundo agente;
-- enviar o relatório automaticamente para um Gmail pelo n8n;
-- opcionalmente enviar um resumo diário também pelo WhatsApp;
-- manter memória curta das conversas mesmo após reiniciar os containers.
+**[⬇ Baixar o projeto completo](https://github.com/berger33/leadflow-local-first/archive/refs/heads/main.zip)** · **[📂 Ver código-fonte](https://github.com/berger33/leadflow-local-first)**
+
+> **Transparência:** a demo não instala Ollama no navegador nem conecta contas pessoais de WhatsApp/Gmail. A versão completa deste repositório executa as duas chamadas reais à LLM local, WAHA, n8n, Gmail e memória SQLite via Docker Compose.
 
 ---
 
-## Diferencial: arquitetura com dois agentes
+## 🎯 Problema que o projeto resolve
 
-O sistema não envia a primeira resposta diretamente ao usuário.
+O LeadFlow foi desenhado para quem quer um assistente pessoal de IA capaz de:
+
+- responder perguntas pelo WhatsApp;
+- manter a inferência principal no próprio computador;
+- pesquisar informações atuais na internet quando necessário;
+- revisar cada resposta com um segundo agente;
+- automatizar pesquisas recorrentes com n8n;
+- gerar relatórios estruturados;
+- enviar relatórios por Gmail;
+- opcionalmente enviar um resumo pelo próprio WhatsApp;
+- manter memória curta das conversas localmente.
+
+## 🧠 Diferencial: dois agentes
 
 ```text
 Pergunta
-   |
-   v
+   ↓
 Agente 1 — Respondente
-   |
-   | resposta preliminar
-   v
+   ↓
+Resposta preliminar
+   ↓
 Agente 2 — Validador
-   |
-   +-- entendeu exatamente a pergunta?
-   +-- respondeu tudo que foi pedido?
-   +-- há afirmações sem suporte?
-   +-- usou corretamente as fontes atuais?
-   |
-   v
+   ├─ entendeu a pergunta?
+   ├─ respondeu tudo que foi pedido?
+   ├─ há afirmações sem suporte?
+   └─ as fontes foram usadas corretamente?
+   ↓
 Resposta aprovada ou corrigida
 ```
 
-O **Agente 2** recebe a pergunta original, a resposta do primeiro agente e as fontes web utilizadas. Ele devolve um score, problemas encontrados e, quando necessário, uma versão corrigida.
+O Agente 2 recebe a **pergunta original, a resposta preliminar e as fontes web**. Ele devolve score, problemas encontrados e, quando necessário, uma versão corrigida antes do envio ao usuário.
 
-Isso não elimina erros de LLM, mas cria uma camada explícita de controle de qualidade antes da resposta final.
-
----
-
-## Arquitetura
+## 🏗️ Arquitetura
 
 ```mermaid
 flowchart LR
@@ -68,38 +67,34 @@ flowchart LR
 
 | Serviço | Responsabilidade | Porta local |
 | --- | --- | ---: |
-| **LeadFlow Assistant** | API, pesquisa, memória, Agente 1 e Agente 2 | `8000` |
-| **Ollama** | execução local da LLM | `11434` |
-| **WAHA** | conexão HTTP/Webhook com WhatsApp | `3000` |
-| **n8n** | agenda, automação, Gmail e integrações | `5678` |
+| LeadFlow Assistant | API, pesquisa, memória, Agente 1 e Agente 2 | `8000` |
+| Ollama | LLM local | `11434` |
+| WAHA | WhatsApp via HTTP/Webhook | `3000` |
+| n8n | agenda, automações e Gmail | `5678` |
 
-As portas são vinculadas a **`127.0.0.1`**, não a todas as interfaces da máquina. A comunicação entre containers ocorre pela rede privada do Docker.
+As portas ficam presas a `127.0.0.1`, e os containers se comunicam pela rede privada do Docker. O Compose fixa as versões de infraestrutura da entrega para aumentar a reprodutibilidade.
 
-Para tornar a entrega reproduzível, o Compose fixa as versões de infraestrutura usadas pela versão 1.0: **Ollama 0.32.6**, **WAHA `latest-2026.7.2`** e **n8n 2.33.5**.
-
-Arquitetura detalhada: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
+Mais detalhes: [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 
 ---
 
-# Instalação rápida no Windows
+# 🚀 Instalação rápida no Windows
 
 ## Requisitos mínimos
 
-- Windows 10 ou 11 64-bit;
-- **Docker Desktop** instalado e aberto;
-- **8 GB de RAM** no mínimo; 16 GB recomendado;
-- aproximadamente **8 GB livres** em disco;
+- Windows 10/11 64-bit;
+- Docker Desktop instalado e aberto;
+- 8 GB RAM mínimo; 16 GB recomendado;
+- cerca de 8 GB livres em disco;
 - internet na primeira instalação e nas pesquisas;
-- um WhatsApp para parear;
-- Gmail somente se quiser receber os relatórios por e-mail.
+- WhatsApp para parear;
+- Gmail apenas se quiser receber relatórios por e-mail.
 
 Veja [`docs/REQUISITOS.md`](docs/REQUISITOS.md).
 
-## 1. Baixe o projeto
+## 1. Baixe
 
-No GitHub, clique em **Code → Download ZIP**, extraia a pasta e abra-a.
-
-Ou use Git:
+Use **Code → Download ZIP** ou:
 
 ```bash
 git clone https://github.com/berger33/leadflow-local-first.git
@@ -108,25 +103,13 @@ cd leadflow-local-first
 
 ## 2. Execute
 
-No Windows, dê duplo clique em:
+Dê duplo clique em:
 
 ```text
 INICIAR_WINDOWS.bat
 ```
 
-O script:
-
-1. verifica se o Docker está instalado e ativo;
-2. cria `.env` automaticamente se necessário;
-3. gera segredos locais aleatórios em UTF-8 sem BOM;
-4. valida a configuração do Docker Compose;
-5. constrói o serviço Python;
-6. inicia Ollama e baixa o modelo local configurado;
-7. só inicia o Assistente depois que o modelo estiver disponível;
-8. só inicia WAHA e n8n depois que a API estiver saudável;
-9. abre os painéis necessários.
-
-Na primeira execução, o download do modelo pode levar alguns minutos.
+O script verifica o Docker, cria `.env`, gera segredos locais, valida o Compose, constrói a API, inicia o Ollama, baixa o modelo e só libera WAHA/n8n quando os serviços anteriores estão saudáveis.
 
 ### Linux/macOS
 
@@ -137,84 +120,47 @@ chmod +x start.sh
 
 ---
 
-# Primeira configuração
+# 🔐 Primeira configuração
 
-São necessárias apenas duas configurações externas porque pertencem às contas do próprio usuário: **parear o WhatsApp** e, se desejado, **autorizar o Gmail**.
+Duas autorizações não podem vir prontas em um repositório público porque pertencem ao usuário.
 
-## 1. WhatsApp
+## WhatsApp
 
-Abra:
+Abra `http://localhost:3000/dashboard`, use as credenciais do seu `.env`, crie/inicie a sessão `default` e escaneie o QR Code. O webhook para o LeadFlow já está definido no Compose.
 
-```text
-http://localhost:3000/dashboard
-```
+## n8n
 
-As credenciais do dashboard e a API key ficam no seu arquivo `.env`.
-
-No painel:
-
-1. conecte o dashboard à API usando `WAHA_API_KEY`;
-2. crie/inicie a sessão `default`;
-3. escaneie o QR Code pelo aplicativo do WhatsApp;
-4. aguarde a sessão ficar operacional.
-
-O webhook já vem configurado no `docker-compose.yml`. Depois do pareamento, mensagens privadas recebidas nessa conta são encaminhadas automaticamente ao LeadFlow.
-
-> Por padrão grupos são ignorados. Você pode alterar `WHATSAPP_REPLY_GROUPS` no `.env`.
-
-## 2. n8n
-
-Abra:
-
-```text
-http://localhost:5678
-```
-
-Na primeira execução, crie o administrador local do n8n.
-
-Depois execute:
+Abra `http://localhost:5678`, crie o administrador local e execute:
 
 ```text
 IMPORTAR_WORKFLOWS_WINDOWS.bat
 ```
 
-ou importe manualmente os JSON da pasta [`n8n/workflows`](n8n/workflows).
-
-### Workflows fornecidos
+Workflows incluídos:
 
 | Workflow | Função |
 | --- | --- |
 | `daily-technology-news.json` | pesquisa diária → dual-agent → relatório HTML → Gmail |
-| `research-on-demand.json` | pesquisa sob demanda exposta por webhook n8n |
-| `daily-whatsapp-summary.json` | resumo diário opcional enviado ao WhatsApp |
+| `research-on-demand.json` | pesquisa sob demanda por webhook n8n |
+| `daily-whatsapp-summary.json` | resumo diário opcional pelo WhatsApp |
 
-## 3. Gmail
+## Gmail
 
-O projeto não versiona credenciais Google.
-
-No workflow **LeadFlow - Relatório diário de tecnologia**, abra o node **Enviar relatório pelo Gmail** e conecte sua credencial Gmail uma única vez.
-
-O node é entregue explicitamente como `resource=message`, `operation=send` e `emailType=html`, deixando apenas a credencial pessoal para configuração.
+No workflow diário, conecte sua própria credencial Gmail OAuth2 ao node **Enviar relatório pelo Gmail**. Nenhum token Google é versionado.
 
 Instruções: [`docs/GMAIL_N8N.md`](docs/GMAIL_N8N.md).
 
 ---
 
-# Usando pelo WhatsApp
+# 💬 Uso pelo WhatsApp
 
-Depois de parear a sessão, basta mandar mensagens para o WhatsApp conectado.
-
-### Detecção automática
-
-Perguntas contendo sinais de atualidade como **hoje**, **agora**, **notícias**, **preço**, **cotação**, **resultado**, **pesquise** ou equivalentes acionam a pesquisa web automaticamente.
+Perguntas com sinais de atualidade como **hoje**, **agora**, **notícias**, **preço**, **cotação**, **resultado** ou **pesquise** acionam busca web automaticamente.
 
 ### Forçar internet
 
 ```text
-/web qual é a cotação do dólar agora?
+/web quais são as notícias mais importantes de IA hoje?
 ```
-
-O prefixo é removido antes da busca. O Assistente obrigatoriamente tenta obter contexto da internet e o Agente Validador recebe as fontes encontradas.
 
 ### Forçar somente a LLM local
 
@@ -222,47 +168,13 @@ O prefixo é removido antes da busca. O Assistente obrigatoriamente tenta obter 
 /local explique recursão em Python
 ```
 
-Nesse caso nenhuma pesquisa web é feita, mesmo que a frase contenha termos que normalmente ativariam a internet.
+O prefixo é removido antes de a pergunta chegar ao modelo/buscador.
 
 ---
 
-# Testando pela API
+# 🔎 Pesquisa e relatório diário
 
-Abra:
-
-```text
-http://localhost:8000/docs
-```
-
-Use `POST /chat`:
-
-```json
-{
-  "message": "Explique o que é RAG de maneira simples",
-  "chat_id": "teste",
-  "use_web": false
-}
-```
-
-Pergunta atual que aciona pesquisa automaticamente:
-
-```json
-{
-  "message": "Quais são as notícias mais importantes de inteligência artificial de hoje?",
-  "chat_id": "teste"
-}
-```
-
-Também há scripts PowerShell:
-
-```powershell
-.\scripts\test-chat.ps1
-.\scripts\test-research.ps1
-```
-
-## Pesquisa completa
-
-`POST /research`:
+O endpoint `POST /research` aceita consultas estruturadas:
 
 ```json
 {
@@ -274,42 +186,40 @@ Também há scripts PowerShell:
 }
 ```
 
-A resposta contém relatório em texto, HTML pronto para e-mail, resumo para WhatsApp, fontes, resultado do segundo agente e horário de geração.
+O retorno contém relatório em texto, HTML pronto para e-mail, resumo para WhatsApp, fontes, validação do segundo agente e horário de geração.
+
+O fluxo diário do n8n agenda essa pesquisa, chama a API, recebe o relatório já revisado e envia por Gmail.
 
 ---
 
-# Como o acesso à internet funciona
+# 🌐 Como o acesso à internet funciona
 
-A **LLM continua local**. Ela não navega sozinha.
+A LLM continua local. Ela não navega sozinha.
 
-Quando uma pergunta depende de informação recente, o LeadFlow:
+1. o LeadFlow detecta necessidade de atualização ou recebe `/web`;
+2. DDGS recupera resultados públicos;
+3. títulos, snippets e URLs entram como contexto do Agente 1;
+4. a resposta atual deve citar as fontes;
+5. pergunta + resposta + fontes são enviadas ao Agente 2;
+6. somente depois a resposta final é entregue.
 
-1. identifica a necessidade de pesquisa ou recebe o comando `/web`;
-2. usa DDGS para consultar metabuscadores públicos;
-3. fornece títulos, snippets e URLs ao Agente 1;
-4. exige que a resposta atual cite essas fontes;
-5. envia pergunta + resposta + fontes ao Agente 2;
-6. só então entrega o resultado.
-
-Isso separa **inferência local** de **recuperação de informação externa**.
+Isso separa **inferência local** de **recuperação externa**.
 
 ---
 
-# Memória de conversa
+# 🧾 Memória local
 
-O Assistente grava uma janela curta de mensagens em SQLite no volume Docker `assistant_data`.
-
-Assim, perguntas de continuação podem usar o contexto de turnos anteriores sem serviço de banco externo.
+Uma janela curta de mensagens fica em SQLite no volume `assistant_data`.
 
 ```env
 MEMORY_TURNS=8
 ```
 
+Assim perguntas de continuação preservam contexto mesmo após reiniciar containers.
+
 ---
 
-# Personalização
-
-As configurações principais ficam em `.env`:
+# ⚙️ Personalização
 
 ```env
 OLLAMA_MODEL=qwen3:4b
@@ -317,40 +227,63 @@ OLLAMA_VALIDATOR_MODEL=qwen3:4b
 GMAIL_REPORT_TO=seu-email@gmail.com
 DAILY_NEWS_QUERY=inteligência artificial, tecnologia, software, cibersegurança e inovação
 DAILY_NEWS_CRON=0 8 * * *
+WHATSAPP_ALLOWED_CHAT_IDS=
 ```
 
-### Restringir quem pode usar o bot
-
-```env
-WHATSAPP_ALLOWED_CHAT_IDS=5511999999999@c.us
-```
-
-Se ficar vazio, qualquer conversa privada recebida pela conta conectada poderá usar o assistente.
+Uma allowlist pode restringir quais chats usam o bot.
 
 ---
 
-# Segurança e privacidade
+# 🛡️ Segurança e privacidade
 
-- `.env` está no `.gitignore`;
-- nenhum token Gmail é versionado;
-- WAHA exige API key;
-- dashboard WAHA usa senha própria;
-- n8n usa chave de criptografia persistente;
-- grupos são ignorados por padrão;
-- existe allowlist opcional de chats;
-- a memória fica em SQLite local;
-- LLM e prompts rodam localmente no Ollama;
-- um segundo agente revisa a resposta antes do envio;
-- todas as portas publicadas ficam presas a `127.0.0.1`;
-- os serviços foram desenhados para uso local/rede Docker confiável.
+- `.env` ignorado pelo Git;
+- nenhum token Gmail versionado;
+- WAHA protegido por API key;
+- dashboard WAHA com senha;
+- chave de criptografia persistente no n8n;
+- grupos ignorados por padrão;
+- allowlist opcional de chats;
+- memória em SQLite local;
+- prompts e LLM executados localmente;
+- portas publicadas apenas em `127.0.0.1`;
+- resposta revisada por um segundo agente.
 
-A WAHA usa automação sobre WhatsApp Web; esse tipo de integração não é a API oficial WhatsApp Business e pode ter riscos de bloqueio. Use de forma responsável.
+A WAHA automatiza WhatsApp Web e não é a API oficial WhatsApp Business. Use de forma responsável.
 
-Leia também [`SECURITY.md`](SECURITY.md).
+Leia [`SECURITY.md`](SECURITY.md).
 
 ---
 
-# Diagnóstico
+# 🧪 Testes e CI
+
+A validação da versão 1.0 registra:
+
+```text
+10 passed
+```
+
+Cobertura:
+
+- roteamento automático web/local;
+- `/web` e `/local`;
+- chamada independente do segundo agente;
+- respostas com fontes;
+- relatório pronto para Gmail;
+- parsing de webhook WAHA;
+- persistência da memória SQLite.
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+O GitHub Actions também valida os JSON dos workflows e `docker compose config`.
+
+Detalhes: [`docs/VALIDACAO.md`](docs/VALIDACAO.md).
+
+---
+
+# 🩺 Diagnóstico
 
 No Windows:
 
@@ -372,55 +305,22 @@ Guia: [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 
 ---
 
-# Testes e CI
-
-A validação local da lógica da versão final resultou em:
-
-```text
-10 passed
-```
-
-Os testes cobrem:
-
-- detecção automática de pergunta que necessita web;
-- comandos `/web` e `/local`;
-- chamada independente do segundo agente;
-- resposta com fontes;
-- geração de relatório pronto para Gmail;
-- parsing de webhook WAHA;
-- persistência da memória local.
-
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# Linux/macOS: source .venv/bin/activate
-pip install -r requirements-dev.txt
-python -m pytest -q
-```
-
-O GitHub Actions valida testes, JSON dos workflows e sintaxe do Docker Compose a cada push.
-
-Escopo de validação e checklist para uma instalação nova: [`docs/VALIDACAO.md`](docs/VALIDACAO.md).
-
----
-
-# Estrutura do repositório
+# 📁 Estrutura
 
 ```text
 leadflow-local-first/
 ├── app/
-│   ├── agents.py             # Agente 1 + Agente 2 + roteamento web/local
-│   ├── config.py             # configuração por ambiente
-│   ├── main.py               # FastAPI / endpoints / webhook WAHA
-│   ├── memory.py             # memória SQLite
-│   ├── ollama_client.py      # cliente da LLM local
-│   ├── schemas.py            # contratos da API
-│   ├── search.py             # pesquisa na internet
-│   └── waha.py               # integração WhatsApp
+│   ├── agents.py
+│   ├── config.py
+│   ├── main.py
+│   ├── memory.py
+│   ├── ollama_client.py
+│   ├── schemas.py
+│   ├── search.py
+│   └── waha.py
+├── demo/
+│   └── index.html
 ├── n8n/workflows/
-│   ├── daily-technology-news.json
-│   ├── daily-whatsapp-summary.json
-│   └── research-on-demand.json
 ├── tests/
 ├── docs/
 ├── scripts/
@@ -435,58 +335,27 @@ leadflow-local-first/
 └── LICENSE
 ```
 
----
-
-# Decisões de engenharia
-
-### Por que FastAPI entre n8n, WAHA e Ollama?
-
-Para que n8n seja responsável por **orquestração**, não pela regra de negócio inteira. O código Python pode ser testado, versionado e usado também fora do n8n.
-
-### Por que duas chamadas de LLM?
-
-A segunda chamada usa um prompt e objetivo diferentes: ela não continua a conversa; ela **critica a resposta anterior** e corrige desvios.
-
-### Por que SQLite?
-
-É suficiente para memória local de um assistente pessoal, não exige infraestrutura adicional e mantém o projeto portátil.
-
-### Por que Docker Compose?
-
-Reduz a diferença entre “funciona no meu PC” e “funciona no computador de quem clonou”. O host precisa essencialmente de Docker, não de Python, Node, n8n e Ollama instalados manualmente.
-
-### Por que versões fixadas?
-
-Porque um portfólio entregável deve ser reproduzível. Atualizações de infraestrutura passam a ser uma decisão explícita, em vez de acontecerem silenciosamente a cada `docker pull`.
-
----
-
-# Limitações conhecidas
-
-- resultados de busca dependem de serviços públicos e podem sofrer rate limit;
-- LLMs locais podem responder mais lentamente em CPU;
-- o segundo agente reduz erros, mas não garante factualidade perfeita;
-- Gmail exige autorização da conta do usuário;
-- WAHA depende do comportamento do WhatsApp Web;
-- a versão 1.0 foi pensada para **uso pessoal/local**, não como SaaS multiusuário exposto publicamente.
-
----
-
-## Documentação da versão
-
-- [Arquitetura](docs/ARQUITETURA.md)
-- [Requisitos](docs/REQUISITOS.md)
-- [Configuração Gmail/n8n](docs/GMAIL_N8N.md)
-- [Validação](docs/VALIDACAO.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Segurança](SECURITY.md)
-- [Changelog](CHANGELOG.md)
-- [Licença MIT](LICENSE)
-
 ## Tecnologias
 
-`Python` · `FastAPI` · `Ollama` · `n8n` · `WAHA` · `Docker Compose` · `SQLite` · `DDGS` · `HTTPX` · `Gmail` · `Pytest` · `GitHub Actions`
+`Python` · `FastAPI` · `Ollama` · `n8n` · `WAHA` · `Docker Compose` · `SQLite` · `DDGS` · `HTTPX` · `Gmail` · `Pytest` · `GitHub Actions` · `HTML/CSS/JavaScript`
 
-## Autor
+## Decisões de engenharia
 
-**William de Melo Berger** — portfólio de desenvolvimento, automação e Inteligência Artificial aplicada.
+- **FastAPI entre n8n, WAHA e Ollama:** mantém regra de negócio testável fora do n8n.
+- **Duas chamadas de LLM:** o segundo prompt tem papel crítico independente do primeiro.
+- **SQLite:** memória simples, local e portátil.
+- **Docker Compose:** reduz diferenças entre ambientes de instalação.
+- **Versões fixadas:** evita que atualizações de infraestrutura quebrem silenciosamente a entrega.
+
+## Limitações conhecidas
+
+- resultados web dependem de serviços públicos;
+- modelos locais podem ser lentos em CPU;
+- o segundo agente reduz erros, mas não garante factualidade perfeita;
+- Gmail exige autorização do usuário;
+- WAHA depende do comportamento do WhatsApp Web;
+- a versão 1.0 é para uso pessoal/local, não para SaaS multiusuário exposto diretamente à internet.
+
+---
+
+**William de Melo Berger — portfólio de desenvolvimento, automação e Inteligência Artificial aplicada.**
