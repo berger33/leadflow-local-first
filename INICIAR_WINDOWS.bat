@@ -27,14 +27,28 @@ if errorlevel 1 (
 if not exist ".env" (
   echo [1/5] Criando .env a partir do modelo...
   copy /Y ".env.example" ".env" >nul
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='.env'; $c=Get-Content $p -Raw; $c=$c.Replace('CHANGE_ME_32_CHARS_OR_MORE',([guid]::NewGuid().ToString('N')+[guid]::NewGuid().ToString('N'))); $c=$c.Replace('CHANGE_ME_STRONG_PASSWORD',([guid]::NewGuid().ToString('N'))); $c=$c.Replace('CHANGE_ME_ANOTHER_LONG_RANDOM_SECRET',([guid]::NewGuid().ToString('N')+[guid]::NewGuid().ToString('N'))); Set-Content $p $c -Encoding UTF8"
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='.env'; $c=Get-Content $p -Raw; $c=$c.Replace('CHANGE_ME_32_CHARS_OR_MORE',([guid]::NewGuid().ToString('N')+[guid]::NewGuid().ToString('N'))); $c=$c.Replace('CHANGE_ME_STRONG_PASSWORD',([guid]::NewGuid().ToString('N'))); $c=$c.Replace('CHANGE_ME_ANOTHER_LONG_RANDOM_SECRET',([guid]::NewGuid().ToString('N')+[guid]::NewGuid().ToString('N'))); [System.IO.File]::WriteAllText((Join-Path (Get-Location) $p),$c,(New-Object System.Text.UTF8Encoding($false)))"
+  if errorlevel 1 (
+    echo [ERRO] Nao foi possivel gerar os segredos no .env.
+    pause
+    exit /b 1
+  )
   echo [OK] Segredos locais fortes foram gerados automaticamente.
   echo IMPORTANTE: edite .env e troque GMAIL_REPORT_TO pelo seu Gmail antes de ativar o workflow de e-mail.
 ) else (
   echo [1/5] Arquivo .env encontrado.
 )
 
-echo [2/5] Construindo e iniciando os containers...
+echo [2/5] Validando configuracao do Docker Compose...
+docker compose config --quiet
+if errorlevel 1 (
+  echo [ERRO] O arquivo .env ou docker-compose.yml possui configuracao invalida.
+  echo Revise o .env e execute novamente.
+  pause
+  exit /b 1
+)
+
+echo [3/5] Construindo e iniciando os containers...
 docker compose up -d --build
 if errorlevel 1 (
   echo [ERRO] Falha ao iniciar os containers.
@@ -43,14 +57,14 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [3/5] Aguardando servicos principais...
+echo [4/5] Aguardando servicos principais...
 timeout /t 8 /nobreak >nul
 
-echo [4/5] Status dos containers:
+echo [5/5] Status dos containers:
 docker compose ps
 
 echo.
-echo [5/5] Abrindo paineis locais...
+echo Abrindo paineis locais...
 start "" "http://localhost:3000/dashboard"
 start "" "http://localhost:5678"
 start "" "http://localhost:8000/docs"
