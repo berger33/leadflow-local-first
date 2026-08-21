@@ -1,27 +1,55 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 cd /d "%~dp0"
-title LeadFlow - Diagnostico
+title Diagnostico - Sistema Agentico n8n WhatsApp+Email
 
-echo === Docker ===
-docker --version
-docker compose version
+echo ============================================================
+echo  Diagnostico do Sistema Agentico
+echo ============================================================
+
 echo.
-echo === Containers ===
+echo [Docker]
+where docker || echo Docker CLI nao encontrado.
+docker info --format "Engine: {{.ServerVersion}}" 2>nul || echo Docker Engine indisponivel.
+
+echo.
+echo [Compose]
+docker compose config --quiet && echo Compose: OK || echo Compose: ERRO
+
+echo.
+echo [Containers]
 docker compose ps
+
 echo.
-echo === API LeadFlow ===
-powershell -NoProfile -Command "try { Invoke-RestMethod http://localhost:8000/health | ConvertTo-Json -Depth 6 } catch { Write-Host $_.Exception.Message -ForegroundColor Red }"
+echo [n8n]
+curl -s http://127.0.0.1:5678/healthz && echo. || echo n8n sem resposta.
+
 echo.
-echo === Ollama ===
-powershell -NoProfile -Command "try { Invoke-RestMethod http://localhost:11434/api/tags | ConvertTo-Json -Depth 5 } catch { Write-Host $_.Exception.Message -ForegroundColor Red }"
+echo [WAHA]
+curl -s http://127.0.0.1:3000/health && echo. || echo WAHA sem resposta.
+
 echo.
-echo === WAHA ===
-powershell -NoProfile -Command "try { Invoke-RestMethod http://localhost:3000/health | ConvertTo-Json -Depth 5 } catch { Write-Host $_.Exception.Message -ForegroundColor Red }"
+echo [Ollama]
+curl -s http://127.0.0.1:11434/api/tags && echo. || echo Ollama sem resposta.
+
 echo.
-echo === n8n ===
-powershell -NoProfile -Command "try { (Invoke-WebRequest http://localhost:5678 -UseBasicParsing).StatusCode } catch { Write-Host $_.Exception.Message -ForegroundColor Red }"
+echo [Ultimos logs n8n]
+docker compose logs --tail=30 n8n
+
 echo.
-echo === Ultimos logs ===
-docker compose logs --tail=25 assistant
+echo [Ultimos logs WAHA]
+docker compose logs --tail=20 waha
+
+echo.
+echo [Ultimos logs Ollama]
+docker compose logs --tail=20 ollama
+
+echo.
+echo [Ultimos logs PostgreSQL]
+docker compose logs --tail=20 postgres
+
+echo.
+echo ============================================================
+echo  Verifique tambem as credenciais Ollama, Gmail e Calendar no n8n.
+echo ============================================================
 pause
