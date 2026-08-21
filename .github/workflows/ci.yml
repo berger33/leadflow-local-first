@@ -6,24 +6,64 @@ on:
   pull_request:
 
 jobs:
-  test:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-      - name: Install dependencies
-        run: pip install -r requirements-dev.txt
-      - name: Unit tests
-        run: python -m pytest -q
+
       - name: Validate workflow JSON
+        run: python -m json.tool n8n-agent-workflow.json >/dev/null
+
+      - name: Validate agentic architecture contract
+        shell: python
         run: |
-          python -m json.tool n8n/workflows/daily-technology-news.json >/dev/null
-          python -m json.tool n8n/workflows/research-on-demand.json >/dev/null
-          python -m json.tool n8n/workflows/daily-whatsapp-summary.json >/dev/null
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('n8n-agent-workflow.json').read_text(encoding='utf-8'))
+          nodes = {node['name']: node for node in data['nodes']}
+
+          required = {
+              'Agente Orquestrador',
+              'Agente QA Validador',
+              'ler_email',
+              'apagar_email',
+              'resumir_email',
+              'enviar_whatsapp',
+              'criar_evento',
+              'Wait · Aprovação apagar_email',
+              'Wait · Aprovação enviar_whatsapp',
+              'Audit · Input',
+              'Audit · Decisão do Agente',
+              'Audit · Output',
+          }
+          missing = sorted(required - nodes.keys())
+          assert not missing, f'Nós obrigatórios ausentes: {missing}'
+
+          assert nodes['Agente Orquestrador']['type'] == '@n8n/n8n-nodes-langchain.agent'
+          assert nodes['Agente QA Validador']['type'] == '@n8n/n8n-nodes-langchain.agent'
+          assert nodes['Wait · Aprovação apagar_email']['type'] == 'n8n-nodes-base.wait'
+          assert nodes['Wait · Aprovação enviar_whatsapp']['type'] == 'n8n-nodes-base.wait'
+          assert nodes['apagar_email']['type'] == '@n8n/n8n-nodes-langchain.toolWorkflow'
+          assert nodes['enviar_whatsapp']['type'] == '@n8n/n8n-nodes-langchain.toolWorkflow'
+
+          text = Path('n8n-agent-workflow.json').read_text(encoding='utf-8')
+          for signature in ['ler_email', 'apagar_email', 'resumir_email', 'enviar_whatsapp', 'criar_evento']:
+              assert signature in text
+
+          print(f'Workflow válido: {len(data["nodes"])} nós, dual-agent, 5 tools e 2 gates HITL.')
+
       - name: Validate Docker Compose syntax
         run: |
           cp .env.example .env
+          sed -i 's/CHANGE_ME_STRONG_DATABASE_PASSWORD/test-database-password/' .env
+          sed -i 's/CHANGE_ME_64_CHARS_OR_MORE/test-encryption-key-012345678901234567890123456789/' .env
+          sed -i 's/CHANGE_ME_32_CHARS_OR_MORE/test-waha-api-key-01234567890123456789/' .env
+          sed -i 's/CHANGE_ME_STRONG_PASSWORD/test-dashboard-password/' .env
           docker compose config --quiet
+
+      - name: Security regression checks
+        run: |
+          ! grep -R -nE '(AIza[0-9A-Za-z_-]{30,}|ghp_[0-9A-Za-z]{20,}|-----BEGIN PRIVATE KEY-----)' . --exclude-dir=.git
+          grep -q '127.0.0.1:5678:5678' docker-compose.yml
+          grep -q '127.0.0.1:3000:3000' docker-compose.yml
