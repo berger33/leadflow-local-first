@@ -1,22 +1,38 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sistema-agentico-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-n8n}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-n8n}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-n8n} -d ${POSTGRES_DB:-n8n}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   ollama:
     image: ollama/ollama:0.32.6
-    container_name: leadflow-ollama
+    container_name: sistema-agentico-ollama
     ports:
       - "127.0.0.1:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
-      retries: 12
+      retries: 20
       start_period: 10s
+    restart: unless-stopped
 
   ollama-init:
     image: ollama/ollama:0.32.6
-    container_name: leadflow-ollama-init
+    container_name: sistema-agentico-ollama-init
     depends_on:
       ollama:
         condition: service_healthy
@@ -31,39 +47,15 @@ services:
         fi
     restart: "no"
 
-  assistant:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: leadflow-assistant
-    depends_on:
-      ollama:
-        condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
-    env_file:
-      - .env
-    environment:
-      OLLAMA_BASE_URL: http://ollama:11434
-      WAHA_BASE_URL: http://waha:3000
-      DATABASE_PATH: /data/leadflow.db
-    ports:
-      - "127.0.0.1:8000:8000"
-    volumes:
-      - assistant_data:/data
-    restart: unless-stopped
-
   waha:
     image: devlikeapro/waha:latest-2026.7.2
-    container_name: leadflow-waha
-    env_file:
-      - .env
+    container_name: sistema-agentico-waha
     environment:
       WAHA_API_KEY: ${WAHA_API_KEY}
-      WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME}
+      WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME:-admin}
       WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD}
       WAHA_API_KEY_EXCLUDE_PATH: health,ping
-      WHATSAPP_HOOK_URL: http://assistant:8000/webhooks/waha
+      WHATSAPP_HOOK_URL: http://n8n:5678/webhook/sistema-agentico/waha
       WHATSAPP_HOOK_EVENTS: message
       WHATSAPP_HOOK_RETRIES_POLICY: linear
       WHATSAPP_HOOK_RETRIES_DELAY_SECONDS: 2
@@ -72,42 +64,51 @@ services:
       - "127.0.0.1:3000:3000"
     volumes:
       - waha_sessions:/app/.sessions
-    depends_on:
-      assistant:
-        condition: service_healthy
     restart: unless-stopped
 
   n8n:
     image: n8nio/n8n:2.33.5
-    container_name: leadflow-n8n
-    env_file:
-      - .env
+    container_name: sistema-agentico-n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+      waha:
+        condition: service_started
     environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB:-n8n}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER:-n8n}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_SECURE_COOKIE: "false"
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
       GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-America/Sao_Paulo}
       TZ: ${GENERIC_TIMEZONE:-America/Sao_Paulo}
-      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
-      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE:-false}
-      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
-      GMAIL_REPORT_TO: ${GMAIL_REPORT_TO}
-      DAILY_NEWS_QUERY: ${DAILY_NEWS_QUERY}
-      DAILY_NEWS_CRON: ${DAILY_NEWS_CRON:-0 8 * * *}
-      ASSISTANT_INTERNAL_URL: http://assistant:8000
-      WAHA_INTERNAL_URL: http://waha:3000
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
+      EXECUTIONS_DATA_SAVE_ON_ERROR: all
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "true"
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b}
+      OLLAMA_VALIDATOR_MODEL: ${OLLAMA_VALIDATOR_MODEL:-qwen3:4b}
+      WAHA_BASE_URL: http://waha:3000
       WAHA_API_KEY: ${WAHA_API_KEY}
       WAHA_SESSION: ${WAHA_SESSION:-default}
-      REPORT_WHATSAPP_CHAT_ID: ${REPORT_WHATSAPP_CHAT_ID:-}
+      APPROVAL_EMAIL: ${APPROVAL_EMAIL}
     ports:
       - "127.0.0.1:5678:5678"
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./n8n/workflows:/workflows:ro
-    depends_on:
-      assistant:
-        condition: service_healthy
+      - ./n8n-agent-workflow.json:/files/n8n-agent-workflow.json:ro
     restart: unless-stopped
 
 volumes:
+  postgres_data:
   ollama_data:
-  assistant_data:
   waha_sessions:
   n8n_data:
