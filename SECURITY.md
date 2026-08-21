@@ -1,37 +1,81 @@
-# Segurança
+# Segurança — Sistema Agêntico n8n WhatsApp+Email
 
-## Escopo suportado
+## Modelo de uso
 
-A versão 1.x do LeadFlow foi projetada para **uso local/pessoal em uma máquina ou rede confiável**. Não é uma aplicação SaaS preparada para exposição direta à internet.
+A versão 2.x foi projetada para **execução local em uma máquina confiável**. n8n, WAHA e Ollama são publicados somente em `127.0.0.1` pelo Docker Compose. O projeto não deve ser exposto diretamente à internet sem autenticação adicional, HTTPS, firewall e revisão do modelo de ameaça.
 
-## Princípios do projeto
+## Human-in-the-loop obrigatório
 
-- segredos e credenciais ficam em `.env` ou no armazenamento criptografado do n8n;
-- `.env` é ignorado pelo Git;
-- WAHA exige API key e senha do dashboard;
-- grupos do WhatsApp são ignorados por padrão;
-- uma allowlist opcional pode limitar quais chats usam o assistente;
-- memória de conversa fica no SQLite local;
-- a inferência da LLM ocorre no Ollama local;
-- credenciais Gmail nunca são incluídas no repositório.
+Duas ferramentas possuem efeito destrutivo ou comunicação externa e são tratadas como operações críticas:
 
-## Antes de expor qualquer serviço fora de localhost
+- `apagar_email(id)`;
+- `enviar_whatsapp(contato, msg)`.
 
-Implemente, no mínimo:
+Essas tools chamam um subfluxo que:
 
-1. reverse proxy com HTTPS;
-2. firewall e restrição de origem;
-3. autenticação adicional na API do Assistente;
-4. proteção do painel n8n e WAHA;
-5. rotação de segredos;
-6. política de backups;
-7. atualização periódica das imagens Docker;
-8. revisão dos termos aplicáveis ao uso de automação de WhatsApp.
+1. registra a solicitação;
+2. envia uma notificação ao endereço `APPROVAL_EMAIL`;
+3. pausa em um nó `Wait`;
+4. somente executa o efeito após aprovação humana explícita;
+5. registra aprovação, rejeição e resultado.
 
-## Relatando um problema
+O prompt do agente não substitui esse controle técnico: mesmo que a LLM solicite a ação, o caminho de execução permanece bloqueado pelo gate humano.
 
-Não publique chaves, cookies, QR codes, tokens OAuth, números privados ou dumps de banco em issues públicas. Ao reportar uma falha, remova informações pessoais e segredos dos logs antes de compartilhá-los.
+## Segredos e credenciais
 
-## Dependências de terceiros
+- `.env` permanece fora do Git;
+- `.env.example` contém somente placeholders;
+- Gmail e Google Calendar usam OAuth2 configurado no próprio n8n;
+- tokens OAuth ficam no armazenamento criptografado do n8n protegido por `N8N_ENCRYPTION_KEY`;
+- WAHA usa API key e senha de dashboard;
+- PostgreSQL usa senha exclusiva;
+- nenhuma chave, cookie, QR code ou token deve ser incluído em commits, issues ou screenshots públicos.
 
-O repositório contém código próprio sob licença MIT, mas utiliza projetos e serviços independentes — incluindo Ollama, n8n, WAHA e bibliotecas Python — que possuem suas próprias licenças, políticas e termos de uso.
+## Auditoria sem cadeia de pensamento
+
+O projeto registra informações observáveis úteis para investigação e QA:
+
+- input do usuário;
+- execution ID;
+- tool escolhida;
+- argumentos da tool;
+- resultado/observação retornado;
+- resumo de decisão em alto nível;
+- status de aprovação humana;
+- output final.
+
+**Não é armazenada cadeia de pensamento privada/raw chain-of-thought.** Rastreabilidade operacional deve se basear em eventos, parâmetros e resultados verificáveis.
+
+## PostgreSQL e histórico
+
+O banco PostgreSQL persiste o estado do n8n e o histórico das execuções. Isso é particularmente importante para fluxos em estado `Waiting`, que precisam sobreviver à pausa até a aprovação/rejeição.
+
+Recomendações:
+
+- backup periódico do volume `postgres_data`;
+- não compartilhar dumps sem sanitização;
+- definir política de retenção adequada ao ambiente;
+- remover dados pessoais de evidências usadas em portfólio.
+
+## WhatsApp
+
+WAHA automatiza WhatsApp Web e não é a API oficial WhatsApp Business. O uso pode estar sujeito a limitações, mudanças da plataforma ou bloqueios. Para uso empresarial em produção, avalie a API oficial e os termos aplicáveis.
+
+## Antes de qualquer exposição externa
+
+Implemente pelo menos:
+
+1. reverse proxy HTTPS;
+2. autenticação forte e MFA no n8n quando aplicável;
+3. firewall e allowlist de origem;
+4. rotação de todos os segredos;
+5. proteção do webhook WAHA;
+6. política de backup e restore testado;
+7. segregação de credenciais por ambiente;
+8. monitoramento e alertas;
+9. política de retenção de execution data;
+10. revisão de privacidade/LGPD conforme o caso de uso.
+
+## Relato de vulnerabilidade
+
+Não publique segredos ou dados pessoais em issues públicas. Ao relatar um problema, forneça passos de reprodução e logs sanitizados, removendo e-mails, telefones, tokens, IDs privados e conteúdo de mensagens.
