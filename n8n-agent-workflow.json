@@ -1,0 +1,503 @@
+{
+  "name": "Sistema Agêntico n8n WhatsApp+Email",
+  "nodes": [
+    {
+      "parameters": {"public": true, "options": {}},
+      "id": "01-chat-trigger",
+      "name": "Chat de Teste",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [-1640, -320],
+      "webhookId": "11111111-1111-4111-8111-111111111111"
+    },
+    {
+      "parameters": {"httpMethod": "POST", "path": "sistema-agentico/waha", "responseMode": "onReceived", "options": {}},
+      "id": "02-waha-webhook",
+      "name": "Webhook WhatsApp WAHA",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-1640, -80],
+      "webhookId": "22222222-2222-4222-8222-222222222222"
+    },
+    {
+      "parameters": {
+        "assignments": {"assignments": [
+          {"id": "a1", "name": "user_text", "value": "={{ $json.chatInput }}", "type": "string"},
+          {"id": "a2", "name": "channel", "value": "chat", "type": "string"},
+          {"id": "a3", "name": "chat_id", "value": "={{ $json.sessionId || 'demo-chat' }}", "type": "string"}
+        ]},
+        "options": {}
+      },
+      "id": "03-normalize-chat",
+      "name": "Normalizar Chat",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1400, -320]
+    },
+    {
+      "parameters": {
+        "assignments": {"assignments": [
+          {"id": "b1", "name": "user_text", "value": "={{ $json.body?.payload?.body || $json.body?.payload?.text || '' }}", "type": "string"},
+          {"id": "b2", "name": "channel", "value": "whatsapp", "type": "string"},
+          {"id": "b3", "name": "chat_id", "value": "={{ $json.body?.payload?.from || $json.body?.payload?.chatId || '' }}", "type": "string"},
+          {"id": "b4", "name": "from_me", "value": "={{ Boolean($json.body?.payload?.fromMe) }}", "type": "boolean"}
+        ]},
+        "options": {}
+      },
+      "id": "04-normalize-waha",
+      "name": "Normalizar WhatsApp",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-1400, -80]
+    },
+    {
+      "parameters": {
+        "conditions": {"options": {"caseSensitive": true, "typeValidation": "strict"}, "conditions": [
+          {"id": "if1", "leftValue": "={{ $json.from_me }}", "rightValue": false, "operator": {"type": "boolean", "operation": "equals"}}
+        ], "combinator": "and"},
+        "options": {}
+      },
+      "id": "05-ignore-self",
+      "name": "Mensagem recebida de outra pessoa?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-1160, -80]
+    },
+    {
+      "parameters": {
+        "jsCode": "const now=new Date().toISOString(); return [{json:{...$json,audit_input:{timestamp:now,execution_id:$execution.id,workflow_id:$workflow.id,channel:$json.channel,chat_id:$json.chat_id,input:$json.user_text,trace_policy:'No raw chain-of-thought. Stores observable input, tool calls and concise decision summaries only.'}}}];"
+      },
+      "id": "06-audit-input",
+      "name": "Audit · Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-900, -240]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.user_text }}",
+        "options": {
+          "returnIntermediateSteps": true,
+          "systemMessage": "Você é o Agente Orquestrador do Sistema Agêntico n8n WhatsApp+Email. Interprete o pedido e use ferramentas apenas quando necessário. Ferramentas: ler_email(query, limit) para leitura; resumir_email(id) para obter um e-mail e resumi-lo; apagar_email(id) apenas quando o usuário pedir explicitamente exclusão; enviar_whatsapp(contato, msg) apenas quando houver pedido explícito de envio; criar_evento(data, titulo) para criar compromisso. Nunca invente IDs, contatos, conteúdo de e-mail ou confirmação de execução. Para apagar e-mail, obtenha ou confirme o ID. Para WhatsApp, confirme destino e texto se houver ambiguidade. apagar_email e enviar_whatsapp passam obrigatoriamente por aprovação humana no subworkflow. Responda em português claro. Finalize com uma única linha 'Resumo da decisão:' explicando em alto nível a ferramenta escolhida e o motivo, sem revelar cadeia de pensamento privada."
+        }
+      },
+      "id": "07-agent",
+      "name": "Agente Orquestrador",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [-620, -240]
+    },
+    {
+      "parameters": {"model": "={{ $env.OLLAMA_MODEL || 'qwen3:4b' }}", "options": {"temperature": 0.2}},
+      "id": "08-model-main",
+      "name": "Ollama · Modelo Executor",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [-760, 40]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": "={{ Math.min(20, Math.max(1, Number($fromAI('limit','Quantidade de e-mails entre 1 e 20','number',5)))) }}",
+        "simple": false,
+        "filters": {"q": "={{ $fromAI('query','Filtro de pesquisa Gmail; deixe vazio quando não houver filtro') }}"},
+        "options": {},
+        "descriptionType": "manual",
+        "toolDescription": "ler_email(query, limit): lista/lê mensagens do Gmail sem alterá-las. Use quando o usuário pedir para consultar, localizar ou listar e-mails. query aceita sintaxe de busca do Gmail e limit deve ficar entre 1 e 20."
+      },
+      "id": "09-tool-read-email",
+      "name": "ler_email",
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [-460, 80]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $fromAI('id','ID real da mensagem Gmail que deve ser resumida') }}",
+        "simple": false,
+        "options": {},
+        "descriptionType": "manual",
+        "toolDescription": "resumir_email(id): recupera um e-mail específico pelo ID. Depois de obter a mensagem, o agente deve produzir um resumo objetivo preservando remetente, assunto, datas, valores, prazos e ações solicitadas. É somente leitura."
+      },
+      "id": "10-tool-summary-email",
+      "name": "resumir_email",
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [-260, 80]
+    },
+    {
+      "parameters": {
+        "name": "apagar_email",
+        "description": "apagar_email(id): exclui uma mensagem Gmail somente quando o usuário pediu explicitamente. Exige ID real. Esta ferramenta chama um subfluxo que envia pedido de aprovação, pausa em um nó Wait e só apaga depois de aprovação humana explícita.",
+        "workflowId": {"__rl": true, "value": "={{ $workflow.id }}", "mode": "id"},
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {"tool": "apagar_email", "id": "={{ $fromAI('id','ID real da mensagem Gmail a apagar') }}"},
+          "matchingColumns": [],
+          "schema": [
+            {"id": "tool", "displayName": "tool", "required": true, "defaultMatch": false, "display": true, "canBeUsedToMatch": false, "type": "string", "removed": false},
+            {"id": "id", "displayName": "id", "required": true, "defaultMatch": false, "display": true, "canBeUsedToMatch": false, "type": "string", "removed": false}
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "11-tool-delete-email",
+      "name": "apagar_email",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [-60, 80]
+    },
+    {
+      "parameters": {
+        "name": "enviar_whatsapp",
+        "description": "enviar_whatsapp(contato, msg): envia uma mensagem via WhatsApp somente quando o usuário solicitou explicitamente. contato deve ser o destino e msg o texto final. O subfluxo envia pedido de aprovação, pausa em um nó Wait e só envia depois de aprovação humana explícita.",
+        "workflowId": {"__rl": true, "value": "={{ $workflow.id }}", "mode": "id"},
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {"tool": "enviar_whatsapp", "contato": "={{ $fromAI('contato','Contato de destino no formato aceito pela WAHA, por exemplo 5511999999999@c.us') }}", "msg": "={{ $fromAI('msg','Mensagem final a enviar') }}"},
+          "matchingColumns": [],
+          "schema": [
+            {"id": "tool", "displayName": "tool", "required": true, "defaultMatch": false, "display": true, "canBeUsedToMatch": false, "type": "string", "removed": false},
+            {"id": "contato", "displayName": "contato", "required": true, "defaultMatch": false, "display": true, "canBeUsedToMatch": false, "type": "string", "removed": false},
+            {"id": "msg", "displayName": "msg", "required": true, "defaultMatch": false, "display": true, "canBeUsedToMatch": false, "type": "string", "removed": false}
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "id": "12-tool-send-whatsapp",
+      "name": "enviar_whatsapp",
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2,
+      "position": [160, 80]
+    },
+    {
+      "parameters": {
+        "calendar": {"__rl": true, "mode": "id", "value": "primary"},
+        "start": "={{ $fromAI('data','Data e hora inicial em ISO 8601, incluindo fuso quando possível') }}",
+        "end": "={{ DateTime.fromISO($fromAI('data','Data e hora inicial em ISO 8601')).plus({hours:1}).toISO() }}",
+        "descriptionType": "manual",
+        "toolDescription": "criar_evento(data, titulo): cria um evento de uma hora no calendário principal. Use apenas quando data/hora e título estiverem inequívocos; se estiverem ambíguos, pergunte antes de chamar.",
+        "additionalFields": {"summary": "={{ $fromAI('titulo','Título curto e descritivo do evento') }}"},
+        "useDefaultReminders": true
+      },
+      "id": "13-tool-calendar",
+      "name": "criar_evento",
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.2,
+      "position": [380, 80]
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('Audit · Input').first().json; const steps=$json.intermediateSteps||[]; const calls=steps.map(s=>({tool:s.action?.tool||s.tool||'unknown',tool_input:s.action?.toolInput||s.toolInput||null,observation:s.observation??null})); const out=String($json.output||''); const m=out.match(/Resumo da decisão:\\s*(.*)$/im); return [{json:{...base,agent_output:out,intermediateSteps:steps,audit_agent:{timestamp:new Date().toISOString(),execution_id:$execution.id,selected_tools:calls,decision_summary:m?m[1].trim():'Tool calls observáveis registrados; cadeia de pensamento privada não é persistida.'}}}];"
+      },
+      "id": "14-audit-agent",
+      "name": "Audit · Decisão do Agente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-300, -240]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=PEDIDO ORIGINAL:\n{{ $('Audit · Input').item.json.user_text }}\n\nRESPOSTA DO ORQUESTRADOR:\n{{ $json.agent_output }}\n\nTOOL CALLS OBSERVÁVEIS:\n{{ JSON.stringify($json.audit_agent.selected_tools) }}",
+        "options": {"systemMessage": "Você é o Agente QA Validador. Revise a resposta do Agente Orquestrador considerando o pedido original e os resultados observáveis das ferramentas. Critérios: aderência ao pedido, clareza, não inventar sucesso de ferramenta, segurança e respeito à aprovação humana. Você NÃO executa ferramentas. Retorne somente a resposta final ao usuário. Se a resposta anterior estiver correta, preserve o conteúdo. Se houver alegação de ação não confirmada, corrija."}
+      },
+      "id": "15-validator",
+      "name": "Agente QA Validador",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [0, -240]
+    },
+    {
+      "parameters": {"model": "={{ $env.OLLAMA_VALIDATOR_MODEL || $env.OLLAMA_MODEL || 'qwen3:4b' }}", "options": {"temperature": 0}},
+      "id": "16-model-validator",
+      "name": "Ollama · Modelo Validador",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [20, 60]
+    },
+    {
+      "parameters": {
+        "jsCode": "const base=$('Audit · Decisão do Agente').first().json; return [{json:{...base,final_output:$json.output,audit_output:{timestamp:new Date().toISOString(),execution_id:$execution.id,output:$json.output,status:'validated'}}}];"
+      },
+      "id": "17-audit-output",
+      "name": "Audit · Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [300, -240]
+    },
+    {
+      "parameters": {
+        "conditions": {"options": {"caseSensitive": true, "typeValidation": "strict"}, "conditions": [
+          {"id": "if2", "leftValue": "={{ $json.channel }}", "rightValue": "whatsapp", "operator": {"type": "string", "operation": "equals"}}
+        ], "combinator": "and"},
+        "options": {}
+      },
+      "id": "18-channel-if",
+      "name": "Canal é WhatsApp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [560, -240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.WAHA_BASE_URL || 'http://waha:3000') + '/api/sendText' }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/json"}, {"name": "X-Api-Key", "value": "={{ $env.WAHA_API_KEY }}"}]},
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({session:$env.WAHA_SESSION || 'default',chatId:$json.chat_id,text:$json.final_output}) }}",
+        "options": {"timeout": 30000}
+      },
+      "id": "19-reply-waha",
+      "name": "Responder WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [820, -340]
+    },
+    {
+      "parameters": {"assignments": {"assignments": [
+        {"id": "r1", "name": "output", "value": "={{ $json.final_output }}", "type": "string"},
+        {"id": "r2", "name": "audit", "value": "={{ {input:$json.audit_input,agent:$json.audit_agent,output:$json.audit_output} }}", "type": "object"}
+      ]}, "options": {}},
+      "id": "20-chat-response",
+      "name": "Resposta de Teste",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [820, -100]
+    },
+    {
+      "parameters": {"workflowInputs": {"values": [
+        {"name": "tool"}, {"name": "id"}, {"name": "contato"}, {"name": "msg"}
+      ]}},
+      "id": "21-tool-start",
+      "name": "Entrada de Ferramenta Destrutiva",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-1120, 680]
+    },
+    {
+      "parameters": {
+        "conditions": {"options": {"caseSensitive": true, "typeValidation": "strict"}, "conditions": [
+          {"id": "if3", "leftValue": "={{ $json.tool }}", "rightValue": "apagar_email", "operator": {"type": "string", "operation": "equals"}}
+        ], "combinator": "and"},
+        "options": {}
+      },
+      "id": "22-tool-router",
+      "name": "É apagar_email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-880, 680]
+    },
+    {
+      "parameters": {"assignments": {"assignments": [
+        {"id": "d1", "name": "tool", "value": "apagar_email", "type": "string"},
+        {"id": "d2", "name": "id", "value": "={{ $json.id }}", "type": "string"},
+        {"id": "d3", "name": "approval_status", "value": "pending", "type": "string"},
+        {"id": "d4", "name": "requested_at", "value": "={{ $now.toISO() }}", "type": "string"}
+      ]}, "options": {}},
+      "id": "23-audit-delete",
+      "name": "Audit · Pedido apagar_email",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-620, 560]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.APPROVAL_EMAIL }}",
+        "subject": "={{ '[APROVAÇÃO] Apagar e-mail ' + $json.id }}",
+        "emailType": "html",
+        "message": "=<h2>Aprovação humana necessária</h2><p>O agente solicitou apagar o e-mail <strong>{{ $json.id }}</strong>.</p><p><a href=\"{{ $execution.resumeUrl }}?approved=true\">APROVAR</a> &nbsp; <a href=\"{{ $execution.resumeUrl }}?approved=false\">REJEITAR</a></p><p>Execução: {{ $execution.id }}</p>",
+        "options": {"appendAttribution": false}
+      },
+      "id": "24-approval-delete-email",
+      "name": "Solicitar aprovação · apagar_email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [-360, 560]
+    },
+    {
+      "parameters": {"resume": "webhook", "options": {"webhookSuffix": "aprovar-apagar-email"}},
+      "id": "25-wait-delete",
+      "name": "Wait · Aprovação apagar_email",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [-100, 560],
+      "webhookId": "33333333-3333-4333-8333-333333333333"
+    },
+    {
+      "parameters": {"conditions": {"options": {"caseSensitive": false, "typeValidation": "loose"}, "conditions": [
+        {"id": "if4", "leftValue": "={{ $json.query?.approved || $json.approved || 'false' }}", "rightValue": "true", "operator": {"type": "string", "operation": "equals"}}
+      ], "combinator": "and"}, "options": {}},
+      "id": "26-delete-approved",
+      "name": "Aprovação exclusão?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [160, 560]
+    },
+    {
+      "parameters": {"operation": "delete", "messageId": "={{ $('Audit · Pedido apagar_email').item.json.id }}", "options": {}},
+      "id": "27-delete-gmail",
+      "name": "Gmail · Apagar Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [420, 500]
+    },
+    {
+      "parameters": {"assignments": {"assignments": [
+        {"id": "dr1", "name": "tool", "value": "apagar_email", "type": "string"},
+        {"id": "dr2", "name": "ok", "value": true, "type": "boolean"},
+        {"id": "dr3", "name": "status", "value": "executed_after_human_approval", "type": "string"}
+      ]}, "options": {}},
+      "id": "28-delete-result",
+      "name": "Resultado · apagar aprovado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 500]
+    },
+    {
+      "parameters": {"assignments": {"assignments": [
+        {"id": "dj1", "name": "tool", "value": "apagar_email", "type": "string"},
+        {"id": "dj2", "name": "ok", "value": false, "type": "boolean"},
+        {"id": "dj3", "name": "status", "value": "rejected_by_human", "type": "string"}
+      ]}, "options": {}},
+      "id": "29-delete-rejected",
+      "name": "Resultado · apagar rejeitado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [420, 620]
+    },
+    {
+      "parameters": {"assignments": {"assignments": [
+        {"id": "w1", "name": "tool", "value": "enviar_whatsapp", "type": "string"},
+        {"id": "w2", "name": "contato", "value": "={{ $json.contato }}", "type": "string"},
+        {"id": "w3", "name": "msg", "value": "={{ $json.msg }}", "type": "string"},
+        {"id": "w4", "name": "approval_status", "value": "pending", "type": "string"}
+      ]}, "options": {}},
+      "id": "30-audit-whatsapp",
+      "name": "Audit · Pedido enviar_whatsapp",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-620, 800]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $env.APPROVAL_EMAIL }}",
+        "subject": "={{ '[APROVAÇÃO] Enviar WhatsApp para ' + $json.contato }}",
+        "emailType": "html",
+        "message": "=<h2>Aprovação humana necessária</h2><p>Destino: <strong>{{ $json.contato }}</strong></p><pre>{{ $json.msg }}</pre><p><a href=\"{{ $execution.resumeUrl }}?approved=true\">APROVAR</a> &nbsp; <a href=\"{{ $execution.resumeUrl }}?approved=false\">REJEITAR</a></p><p>Execução: {{ $execution.id }}</p>",
+        "options": {"appendAttribution": false}
+      },
+      "id": "31-approval-whatsapp-email",
+      "name": "Solicitar aprovação · enviar_whatsapp",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [-360, 800]
+    },
+    {
+      "parameters": {"resume": "webhook", "options": {"webhookSuffix": "aprovar-enviar-whatsapp"}},
+      "id": "32-wait-whatsapp",
+      "name": "Wait · Aprovação enviar_whatsapp",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [-100, 800],
+      "webhookId": "44444444-4444-4444-8444-444444444444"
+    },
+    {
+      "parameters": {"conditions": {"options": {"caseSensitive": false, "typeValidation": "loose"}, "conditions": [
+        {"id": "if5", "leftValue": "={{ $json.query?.approved || $json.approved || 'false' }}", "rightValue": "true", "operator": {"type": "string", "operation": "equals"}}
+      ], "combinator": "and"}, "options": {}},
+      "id": "33-whatsapp-approved",
+      "name": "Aprovação WhatsApp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [160, 800]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.WAHA_BASE_URL || 'http://waha:3000') + '/api/sendText' }}",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Content-Type", "value": "application/json"}, {"name": "X-Api-Key", "value": "={{ $env.WAHA_API_KEY }}"}]},
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({session:$env.WAHA_SESSION || 'default',chatId:$('Audit · Pedido enviar_whatsapp').item.json.contato,text:$('Audit · Pedido enviar_whatsapp').item.json.msg}) }}",
+        "options": {"timeout": 30000}
+      },
+      "id": "34-send-waha",
+      "name": "WAHA · Enviar WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 740]
+    },
+    {
+      "parameters": {"assignments": {"assignments": [
+        {"id": "wr1", "name": "tool", "value": "enviar_whatsapp", "type": "string"},
+        {"id": "wr2", "name": "ok", "value": true, "type": "boolean"},
+        {"id": "wr3", "name": "status", "value": "sent_after_human_approval", "type": "string"}
+      ]}, "options": {}},
+      "id": "35-whatsapp-result",
+      "name": "Resultado · WhatsApp aprovado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [680, 740]
+    },
+    {
+      "parameters": {"assignments": {"assignments": [
+        {"id": "wj1", "name": "tool", "value": "enviar_whatsapp", "type": "string"},
+        {"id": "wj2", "name": "ok", "value": false, "type": "boolean"},
+        {"id": "wj3", "name": "status", "value": "rejected_by_human", "type": "string"}
+      ]}, "options": {}},
+      "id": "36-whatsapp-rejected",
+      "name": "Resultado · WhatsApp rejeitado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [420, 860]
+    }
+  ],
+  "connections": {
+    "Chat de Teste": {"main": [[{"node": "Normalizar Chat", "type": "main", "index": 0}]]},
+    "Webhook WhatsApp WAHA": {"main": [[{"node": "Normalizar WhatsApp", "type": "main", "index": 0}]]},
+    "Normalizar Chat": {"main": [[{"node": "Audit · Input", "type": "main", "index": 0}]]},
+    "Normalizar WhatsApp": {"main": [[{"node": "Mensagem recebida de outra pessoa?", "type": "main", "index": 0}]]},
+    "Mensagem recebida de outra pessoa?": {"main": [[{"node": "Audit · Input", "type": "main", "index": 0}], []]},
+    "Audit · Input": {"main": [[{"node": "Agente Orquestrador", "type": "main", "index": 0}]]},
+    "Ollama · Modelo Executor": {"ai_languageModel": [[{"node": "Agente Orquestrador", "type": "ai_languageModel", "index": 0}]]},
+    "ler_email": {"ai_tool": [[{"node": "Agente Orquestrador", "type": "ai_tool", "index": 0}]]},
+    "resumir_email": {"ai_tool": [[{"node": "Agente Orquestrador", "type": "ai_tool", "index": 0}]]},
+    "apagar_email": {"ai_tool": [[{"node": "Agente Orquestrador", "type": "ai_tool", "index": 0}]]},
+    "enviar_whatsapp": {"ai_tool": [[{"node": "Agente Orquestrador", "type": "ai_tool", "index": 0}]]},
+    "criar_evento": {"ai_tool": [[{"node": "Agente Orquestrador", "type": "ai_tool", "index": 0}]]},
+    "Agente Orquestrador": {"main": [[{"node": "Audit · Decisão do Agente", "type": "main", "index": 0}]]},
+    "Audit · Decisão do Agente": {"main": [[{"node": "Agente QA Validador", "type": "main", "index": 0}]]},
+    "Ollama · Modelo Validador": {"ai_languageModel": [[{"node": "Agente QA Validador", "type": "ai_languageModel", "index": 0}]]},
+    "Agente QA Validador": {"main": [[{"node": "Audit · Output", "type": "main", "index": 0}]]},
+    "Audit · Output": {"main": [[{"node": "Canal é WhatsApp?", "type": "main", "index": 0}]]},
+    "Canal é WhatsApp?": {"main": [[{"node": "Responder WhatsApp", "type": "main", "index": 0}], [{"node": "Resposta de Teste", "type": "main", "index": 0}]]},
+    "Entrada de Ferramenta Destrutiva": {"main": [[{"node": "É apagar_email?", "type": "main", "index": 0}]]},
+    "É apagar_email?": {"main": [[{"node": "Audit · Pedido apagar_email", "type": "main", "index": 0}], [{"node": "Audit · Pedido enviar_whatsapp", "type": "main", "index": 0}]]},
+    "Audit · Pedido apagar_email": {"main": [[{"node": "Solicitar aprovação · apagar_email", "type": "main", "index": 0}]]},
+    "Solicitar aprovação · apagar_email": {"main": [[{"node": "Wait · Aprovação apagar_email", "type": "main", "index": 0}]]},
+    "Wait · Aprovação apagar_email": {"main": [[{"node": "Aprovação exclusão?", "type": "main", "index": 0}]]},
+    "Aprovação exclusão?": {"main": [[{"node": "Gmail · Apagar Email", "type": "main", "index": 0}], [{"node": "Resultado · apagar rejeitado", "type": "main", "index": 0}]]},
+    "Gmail · Apagar Email": {"main": [[{"node": "Resultado · apagar aprovado", "type": "main", "index": 0}]]},
+    "Audit · Pedido enviar_whatsapp": {"main": [[{"node": "Solicitar aprovação · enviar_whatsapp", "type": "main", "index": 0}]]},
+    "Solicitar aprovação · enviar_whatsapp": {"main": [[{"node": "Wait · Aprovação enviar_whatsapp", "type": "main", "index": 0}]]},
+    "Wait · Aprovação enviar_whatsapp": {"main": [[{"node": "Aprovação WhatsApp?", "type": "main", "index": 0}]]},
+    "Aprovação WhatsApp?": {"main": [[{"node": "WAHA · Enviar WhatsApp", "type": "main", "index": 0}], [{"node": "Resultado · WhatsApp rejeitado", "type": "main", "index": 0}]]},
+    "WAHA · Enviar WhatsApp": {"main": [[{"node": "Resultado · WhatsApp aprovado", "type": "main", "index": 0}]]}
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {"executionOrder": "v1", "timezone": "America/Sao_Paulo", "callerPolicy": "workflowsFromSameOwner", "saveDataSuccessExecution": "all", "saveManualExecutions": true},
+  "versionId": "55555555-5555-4555-8555-555555555555",
+  "meta": {"templateCredsSetupCompleted": false},
+  "tags": []
+}
