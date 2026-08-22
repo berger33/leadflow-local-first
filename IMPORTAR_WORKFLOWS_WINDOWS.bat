@@ -4,34 +4,26 @@ cd /d "%~dp0"
 title Importar Sistema Agentico no n8n
 
 echo ============================================================
-echo  Importando n8n-agent-workflow.json
+echo  Sistema Agentico - Importacao segura do workflow
 echo ============================================================
+echo.
+echo O bootstrap agora inicia/repara os servicos, valida o modelo,
+echo aguarda o n8n e evita importar o mesmo workflow duas vezes.
+echo.
 
-docker info >nul 2>&1
-if errorlevel 1 (
-  echo [ERRO] Docker Desktop nao esta em execucao.
-  pause
-  exit /b 1
-)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\bootstrap.ps1" -NoOpen
+set "BOOTSTRAP_EXIT=%ERRORLEVEL%"
 
-docker compose ps n8n | findstr /i "Up running" >nul 2>&1
-if errorlevel 1 (
-  echo [INFO] Iniciando stack antes da importacao...
-  docker compose up -d
-  timeout /t 10 /nobreak >nul
-)
-
-docker compose exec -T n8n n8n import:workflow --input=/files/n8n-agent-workflow.json
-if errorlevel 1 (
+if not "%BOOTSTRAP_EXIT%"=="0" (
   echo.
-  echo [ERRO] A importacao automatica falhou.
-  echo Alternativa: abra http://127.0.0.1:5678 e use Import from File.
-  echo Arquivo: n8n-agent-workflow.json
+  echo [ERRO] Nao foi possivel concluir a importacao.
+  echo Execute DIAGNOSTICO_WINDOWS.bat para mais detalhes.
   pause
-  exit /b 1
+  exit /b %BOOTSTRAP_EXIT%
 )
 
 echo.
-echo [OK] Workflow importado com sucesso.
-echo Abra http://127.0.0.1:5678, selecione as credenciais e teste pelo Chat de Teste.
+echo [OK] Stack verificado e workflow disponivel no n8n.
+echo Abra http://127.0.0.1:5678
 pause
+exit /b 0
