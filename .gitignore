@@ -1,5 +1,6 @@
 .env
 .setup-complete
+setup/*.runtime.json
 .DS_Store
 .vscode/
 .idea/
