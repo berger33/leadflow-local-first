@@ -68,10 +68,11 @@ jobs:
       - name: Validate Windows bootstrap PowerShell syntax
         shell: pwsh
         run: |
+          $tokens = $null
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile(
             (Resolve-Path 'scripts/bootstrap.ps1'),
-            [ref]$null,
+            [ref]$tokens,
             [ref]$errors
           ) | Out-Null
           if ($errors.Count -gt 0) {
