@@ -1,27 +1,59 @@
-# Configuração de credenciais — primeira execução
+# Configuração de acessos — primeira execução
 
-As integrações usam contas do próprio instalador. O repositório não contém credenciais prontas.
+O projeto automatiza tudo o que pode ser configurado com segurança sem se passar pelo usuário. Contas externas continuam exigindo consentimento do proprietário.
 
-## 1. Ollama
+## O que é automático
 
-Com o stack iniciado, o Ollama fica disponível entre containers em:
+Ao executar `INICIAR_WINDOWS.bat`, o bootstrap:
+
+- cria `.env` se necessário;
+- gera senhas/chaves internas aleatórias;
+- inicia PostgreSQL e Ollama;
+- aguarda os serviços ficarem saudáveis;
+- verifica se os modelos definidos em `OLLAMA_MODEL` e `OLLAMA_VALIDATOR_MODEL` já existem;
+- baixa os modelos ausentes com até três tentativas;
+- inicia n8n e WAHA;
+- detecta se o n8n ainda precisa criar o primeiro proprietário local;
+- aguarda esse cadastro quando necessário;
+- importa o workflow principal sem duplicá-lo.
+
+## 1. Proprietário local do n8n
+
+Em uma instalação nova, o n8n exige a criação de um usuário proprietário local.
+
+O bootstrap detecta `showSetupOnFirstLoad`, abre automaticamente:
 
 ```text
-http://ollama:11434
+http://127.0.0.1:5678
 ```
 
-No n8n:
+Preencha o formulário do n8n e volte ao terminal. Ao pressionar `ENTER`, o bootstrap confirma que o cadastro terminou e continua a importação.
 
-1. abra **Credentials**;
-2. crie uma credencial **Ollama API**;
-3. informe `http://ollama:11434`;
-4. selecione-a em `Ollama · Modelo Executor` e `Ollama · Modelo Validador`.
+Esse acesso é local ao n8n e não é uma chave de API externa.
 
-O `ollama-init` baixa automaticamente os modelos definidos por `OLLAMA_MODEL` e `OLLAMA_VALIDATOR_MODEL`.
+## 2. Ollama
 
-## 2. Gmail OAuth2
+O modelo é baixado automaticamente. A única configuração restante no editor do n8n é a conexão local exigida pelo próprio tipo de nó Ollama.
 
-No n8n, conecte sua conta Gmail e atribua a mesma credencial aos nós:
+Crie uma credencial **Ollama API** com:
+
+```text
+Base URL: http://ollama:11434
+API Key: deixe vazio
+```
+
+Selecione-a em:
+
+- `Ollama · Modelo Executor`;
+- `Ollama · Modelo Validador`.
+
+Nenhuma chave paga é necessária para o Ollama local.
+
+## 3. Gmail OAuth2
+
+Gmail é uma conta externa. O n8n precisa que o próprio usuário autorize o acesso via OAuth2.
+
+Conecte uma credencial Gmail e atribua-a aos nós:
 
 - `ler_email`;
 - `resumir_email`;
@@ -29,15 +61,21 @@ No n8n, conecte sua conta Gmail e atribua a mesma credencial aos nós:
 - `Gmail · Apagar Email`;
 - `Solicitar aprovação · enviar_whatsapp`.
 
-Use uma conta de teste para os primeiros ensaios de exclusão.
+Para os primeiros testes de exclusão, use mensagens sem importância ou uma conta de teste.
 
-## 3. Google Calendar OAuth2
+## 4. Google Calendar OAuth2
 
-Crie/conecte uma credencial Google Calendar e selecione-a em `criar_evento`.
+Conecte a conta Google Calendar e selecione-a no nó:
 
-Primeiro teste recomendado: evento descartável com data e título inequívocos.
+```text
+criar_evento
+```
 
-## 4. WhatsApp / WAHA
+Primeiro teste recomendado: criar um evento descartável.
+
+## 5. WhatsApp / WAHA
+
+O bootstrap gera automaticamente a API key e senha local do WAHA no `.env`.
 
 Abra:
 
@@ -45,34 +83,36 @@ Abra:
 http://127.0.0.1:3000/dashboard
 ```
 
-Use `WAHA_API_KEY`, `WAHA_DASHBOARD_USERNAME` e `WAHA_DASHBOARD_PASSWORD` do `.env`.
+O pareamento do WhatsApp exige QR Code porque depende do aparelho/conta real do usuário.
 
-Depois:
-
-1. crie/inicie a sessão `default`;
-2. escaneie o QR Code com o WhatsApp de teste;
+1. abra/inicie a sessão `default`;
+2. escaneie o QR Code;
 3. aguarde a sessão ficar operacional;
-4. confirme que o webhook configurado pelo Compose aponta para o n8n.
+4. o webhook para o n8n já vem configurado pelo Compose.
 
-## 5. E-mail de aprovação humana
+## 6. E-mail de aprovação humana
 
-Edite `.env`:
+Na primeira execução, se `APPROVAL_EMAIL` estiver vazio, o bootstrap pergunta qual endereço deverá receber os links de aprovação.
 
-```env
-APPROVAL_EMAIL=seu-email@gmail.com
-```
+Você pode pressionar `ENTER` para configurar depois enquanto testa somente caminhos não destrutivos.
 
-Esse endereço recebe os links para retomar ou cancelar execuções pausadas nos nós `Wait`.
+## Por que OAuth e QR Code não são automatizados silenciosamente?
+
+Porque Gmail, Calendar e WhatsApp representam identidade e autorização do próprio usuário. Guardar tokens, cookies ou sessões reais em um repositório público seria inseguro.
+
+A automação termina exatamente na fronteira onde o consentimento humano precisa começar.
 
 ## Ordem segura de validação
 
-1. `ler_email`;
-2. `resumir_email`;
-3. `criar_evento` com evento descartável;
-4. `apagar_email` e **rejeitar**;
-5. `enviar_whatsapp` e **rejeitar**;
-6. confirmar que nenhum efeito ocorreu;
-7. repetir com aprovação usando somente dados de teste;
-8. ativar o workflow para o webhook do WhatsApp.
+1. configure a conexão Ollama;
+2. faça uma pergunta simples pelo Chat de Teste;
+3. conecte Gmail e teste `ler_email`;
+4. teste `resumir_email`;
+5. conecte Calendar e crie um evento descartável;
+6. solicite `apagar_email` e **rejeite**;
+7. pareie o WhatsApp e solicite um envio para seu próprio número, também rejeitando primeiro;
+8. confirme que nenhuma ação crítica ocorreu sem aprovação;
+9. valide os caminhos aprovados;
+10. só depois ative o webhook para uso cotidiano.
 
 Consulte também [`QA_TEST_PLAN.md`](QA_TEST_PLAN.md).
