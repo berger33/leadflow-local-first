@@ -4,6 +4,14 @@
 
 A versão 2.x foi projetada para **execução local em uma máquina confiável**. n8n, WAHA e Ollama são publicados somente em `127.0.0.1` pelo Docker Compose. O projeto não deve ser exposto diretamente à internet sem autenticação adicional, HTTPS, firewall e revisão do modelo de ameaça.
 
+O instalador visual também escuta somente em:
+
+```text
+127.0.0.1:8765
+```
+
+Ele não foi projetado como painel remoto.
+
 ## Human-in-the-loop obrigatório
 
 Duas ferramentas possuem efeito destrutivo ou comunicação externa e são tratadas como operações críticas:
@@ -23,13 +31,67 @@ O prompt do agente não substitui esse controle técnico: mesmo que a LLM solici
 
 ## Segredos e credenciais
 
+### `.env`
+
 - `.env` permanece fora do Git;
-- `.env.example` contém somente placeholders;
-- Gmail e Google Calendar usam OAuth2 configurado no próprio n8n;
-- tokens OAuth ficam no armazenamento criptografado do n8n protegido por `N8N_ENCRYPTION_KEY`;
-- WAHA usa API key e senha de dashboard;
-- PostgreSQL usa senha exclusiva;
-- nenhuma chave, cookie, QR code ou token deve ser incluído em commits, issues ou screenshots públicos.
+- `.env.example` contém somente placeholders/campos vazios;
+- senha PostgreSQL, chave de criptografia n8n, API key WAHA e senha WAHA são geradas localmente;
+- Google Client ID/Secret, quando informados no wizard, ficam apenas no `.env` local;
+- nenhum `.env` real deve ser compartilhado em issue, commit ou screenshot.
+
+### Senha do proprietário n8n
+
+A senha escolhida na primeira tela do instalador:
+
+- é transmitida somente ao servidor de setup em `127.0.0.1`;
+- fica em memória no processo PowerShell apenas durante a instalação;
+- é enviada ao endpoint local oficial de criação do proprietário n8n;
+- **não é escrita no `.env`**;
+- **não é gravada em arquivo temporário pelo instalador**;
+- é descartada quando o wizard termina.
+
+O hash e a autenticação posteriores ficam sob responsabilidade do próprio n8n.
+
+### Arquivos temporários de importação
+
+A fase de finalização pode criar:
+
+```text
+setup/credentials.runtime.json
+setup/workflow.runtime.json
+```
+
+Eles existem para que a CLI do n8n receba credenciais e referências do workflow. Como podem conter Client Secret Google:
+
+- estão no `.gitignore`;
+- a pasta é montada como somente leitura dentro do container n8n;
+- os arquivos são removidos em bloco `finally` após sucesso ou falha da finalização;
+- não devem ser copiados para relatórios ou anexos.
+
+### OAuth
+
+- Gmail e Google Calendar usam OAuth2;
+- Client ID/Secret podem ser preparados pelo wizard;
+- o consentimento da conta continua sendo feito pelo usuário no Google;
+- tokens OAuth ficam no armazenamento criptografado do n8n, protegido por `N8N_ENCRYPTION_KEY`;
+- o instalador não versiona tokens OAuth.
+
+### WhatsApp / WAHA
+
+- WAHA usa API key e senha de dashboard geradas localmente;
+- o pareamento depende de QR Code do proprietário;
+- sessão, cookies e QR Code não devem ser publicados;
+- o wizard apenas exibe as credenciais locais necessárias para abrir o dashboard.
+
+## Cabeçalhos do wizard
+
+O servidor local do instalador envia, entre outros:
+
+- `Cache-Control: no-store`;
+- `X-Content-Type-Options: nosniff`;
+- política CSP restritiva para a página local.
+
+Essas medidas reduzem armazenamento acidental no navegador e carregamento desnecessário de recursos externos, mas não transformam o wizard em uma interface destinada à internet.
 
 ## Auditoria sem cadeia de pensamento
 
@@ -48,7 +110,7 @@ O projeto registra informações observáveis úteis para investigação e QA:
 
 ## PostgreSQL e histórico
 
-O banco PostgreSQL persiste o estado do n8n e o histórico das execuções. Isso é particularmente importante para fluxos em estado `Waiting`, que precisam sobreviver à pausa até a aprovação/rejeição.
+O PostgreSQL persiste estado e histórico das execuções n8n. Isso é especialmente relevante para workflows em estado `Waiting`.
 
 Recomendações:
 
@@ -57,9 +119,9 @@ Recomendações:
 - definir política de retenção adequada ao ambiente;
 - remover dados pessoais de evidências usadas em portfólio.
 
-## WhatsApp
+## WhatsApp e ambiente empresarial
 
-WAHA automatiza WhatsApp Web e não é a API oficial WhatsApp Business. O uso pode estar sujeito a limitações, mudanças da plataforma ou bloqueios. Para uso empresarial em produção, avalie a API oficial e os termos aplicáveis.
+WAHA automatiza WhatsApp Web e não é a API oficial WhatsApp Business. O uso pode estar sujeito a limitações, mudanças de plataforma ou bloqueios. Para uso empresarial em produção, avalie a API oficial e os termos aplicáveis.
 
 ## Antes de qualquer exposição externa
 
@@ -68,9 +130,9 @@ Implemente pelo menos:
 1. reverse proxy HTTPS;
 2. autenticação forte e MFA no n8n quando aplicável;
 3. firewall e allowlist de origem;
-4. rotação de todos os segredos;
-5. proteção do webhook WAHA;
-6. política de backup e restore testado;
+4. rotação de segredos;
+5. proteção do webhook;
+6. backup/restore testado;
 7. segregação de credenciais por ambiente;
 8. monitoramento e alertas;
 9. política de retenção de execution data;
