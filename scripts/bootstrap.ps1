@@ -9,8 +9,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$RuntimeCredentialFile = Join-Path $ProjectRoot 'setup\credentials.runtime.json'
-$RuntimeWorkflowFile = Join-Path $ProjectRoot 'setup\workflow.runtime.json'
+$SetupDir = Join-Path $ProjectRoot 'setup'
+$RuntimeCredentialFile = Join-Path $SetupDir 'credentials.runtime.json'
+$RuntimeWorkflowFile = Join-Path $SetupDir 'workflow.runtime.json'
 Set-Location $ProjectRoot
 
 $OllamaCredentialId = '11111111-aaaa-4aaa-8aaa-111111111111'
