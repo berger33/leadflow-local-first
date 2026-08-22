@@ -20,14 +20,6 @@ function Write-Warn([string]$Message) {
     Write-Host "[AVISO] $Message" -ForegroundColor Yellow
 }
 
-function Invoke-Compose {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$ComposeArgs)
-    & docker compose @ComposeArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "docker compose $($ComposeArgs -join ' ') falhou com codigo $LASTEXITCODE."
-    }
-}
-
 function Get-EnvMap {
     $map = @{}
     if (-not (Test-Path '.env')) { return $map }
@@ -257,7 +249,10 @@ try {
     $pgDatabase = if ($envMap.ContainsKey('POSTGRES_DB') -and $envMap['POSTGRES_DB']) { $envMap['POSTGRES_DB'] } else { 'n8n' }
 
     Write-Step 'Iniciando PostgreSQL e Ollama'
-    Invoke-Compose up -d postgres ollama
+    & docker compose up -d postgres ollama
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Falha ao iniciar PostgreSQL/Ollama. Execute DIAGNOSTICO_WINDOWS.bat para detalhes.'
+    }
 
     if (-not (Wait-Postgres $pgUser $pgDatabase)) {
         & docker compose logs --tail=80 postgres
@@ -277,7 +272,10 @@ try {
     if ($validatorModel -ne $mainModel) { Ensure-OllamaModel $validatorModel }
 
     Write-Step 'Iniciando n8n e WAHA'
-    Invoke-Compose up -d n8n waha
+    & docker compose up -d n8n waha
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Falha ao iniciar n8n/WAHA. Execute DIAGNOSTICO_WINDOWS.bat para detalhes.'
+    }
 
     if (-not (Wait-Http 'http://127.0.0.1:5678/healthz' 90 2)) {
         & docker compose logs --tail=120 n8n
