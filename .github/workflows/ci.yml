@@ -22,36 +22,47 @@ jobs:
 
           data = json.loads(Path('n8n-agent-workflow.json').read_text(encoding='utf-8'))
           nodes = {node['name']: node for node in data['nodes']}
-
           required = {
-              'Agente Orquestrador',
-              'Agente QA Validador',
-              'ler_email',
-              'apagar_email',
-              'resumir_email',
-              'enviar_whatsapp',
-              'criar_evento',
-              'Wait · Aprovação apagar_email',
-              'Wait · Aprovação enviar_whatsapp',
-              'Audit · Input',
-              'Audit · Decisão do Agente',
-              'Audit · Output',
+              'Agente Orquestrador', 'Agente QA Validador', 'ler_email',
+              'apagar_email', 'resumir_email', 'enviar_whatsapp', 'criar_evento',
+              'Wait · Aprovação apagar_email', 'Wait · Aprovação enviar_whatsapp',
+              'Audit · Input', 'Audit · Decisão do Agente', 'Audit · Output',
           }
           missing = sorted(required - nodes.keys())
           assert not missing, f'Nós obrigatórios ausentes: {missing}'
-
           assert nodes['Agente Orquestrador']['type'] == '@n8n/n8n-nodes-langchain.agent'
           assert nodes['Agente QA Validador']['type'] == '@n8n/n8n-nodes-langchain.agent'
           assert nodes['Wait · Aprovação apagar_email']['type'] == 'n8n-nodes-base.wait'
           assert nodes['Wait · Aprovação enviar_whatsapp']['type'] == 'n8n-nodes-base.wait'
           assert nodes['apagar_email']['type'] == '@n8n/n8n-nodes-langchain.toolWorkflow'
           assert nodes['enviar_whatsapp']['type'] == '@n8n/n8n-nodes-langchain.toolWorkflow'
-
-          text = Path('n8n-agent-workflow.json').read_text(encoding='utf-8')
-          for signature in ['ler_email', 'apagar_email', 'resumir_email', 'enviar_whatsapp', 'criar_evento']:
-              assert signature in text
-
           print(f'Workflow válido: {len(data["nodes"])} nós, dual-agent, 5 tools e 2 gates HITL.')
+
+      - name: Validate visual installer HTML contract
+        shell: python
+        run: |
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          html = Path('setup/index.html').read_text(encoding='utf-8')
+          required_ids = {
+              'approvalEmail','model','validatorModel','timezone','googleClientId',
+              'googleClientSecret','googleCallback','installBtn','finalizeBtn',
+              'wahaUser','wahaPass','progress','log'
+          }
+          class P(HTMLParser):
+              def __init__(self):
+                  super().__init__(); self.ids=set()
+              def handle_starttag(self, tag, attrs):
+                  d=dict(attrs)
+                  if 'id' in d: self.ids.add(d['id'])
+          p=P(); p.feed(html)
+          missing=required_ids-p.ids
+          assert not missing, f'IDs obrigatórios da UI ausentes: {sorted(missing)}'
+          assert '/api/config' in html and '/api/install' in html and '/api/finalize' in html
+          assert 'http://localhost:5678/rest/oauth2-credential/callback' in html
+          assert 'Configure sem editar arquivos' in html
+          print('Visual installer HTML contract: OK')
 
       - name: Prepare CI environment
         run: |
@@ -65,30 +76,41 @@ jobs:
       - name: Validate Docker Compose syntax
         run: docker compose config --quiet
 
-      - name: Validate Windows bootstrap PowerShell syntax
+      - name: Validate Windows PowerShell scripts syntax
         shell: pwsh
         run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path 'scripts/bootstrap.ps1'),
-            [ref]$tokens,
-            [ref]$errors
-          ) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | Format-List | Out-String | Write-Error
-            exit 1
+          foreach ($path in @('scripts/bootstrap.ps1','scripts/setup-wizard.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path), [ref]$tokens, [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | Format-List | Out-String | Write-Error
+              exit 1
+            }
+            Write-Host "$path syntax: OK"
           }
-          Write-Host 'bootstrap.ps1 syntax: OK'
 
-      - name: Validate first-run bootstrap contract
+      - name: Validate guided setup contract
         run: |
+          grep -q "ValidateSet('Full','Prepare','Finalize','Start')" scripts/bootstrap.ps1
           grep -q 'showSetupOnFirstLoad' scripts/bootstrap.ps1
           grep -q "docker compose up -d postgres ollama" scripts/bootstrap.ps1
           grep -q "docker compose up -d n8n waha" scripts/bootstrap.ps1
           grep -q 'ollama pull' scripts/bootstrap.ps1
           grep -q 'ollama show' scripts/bootstrap.ps1
+          grep -q 'import:credentials' scripts/bootstrap.ps1
           grep -q 'import:workflow' scripts/bootstrap.ps1
+          grep -q 'Ollama Local - Sistema Agentico' scripts/bootstrap.ps1
+          grep -q 'Gmail - Sistema Agentico' scripts/bootstrap.ps1
+          grep -q 'Google Calendar - Sistema Agentico' scripts/bootstrap.ps1
+          grep -q '/api/config' scripts/setup-wizard.ps1
+          grep -q '/api/install' scripts/setup-wizard.ps1
+          grep -q '/api/finalize' scripts/setup-wizard.ps1
+          grep -q 'GOOGLE_CLIENT_ID' .env.example
+          grep -q 'GOOGLE_CLIENT_SECRET' .env.example
+          grep -q 'http://localhost:5678/rest/oauth2-credential/callback' .env.example
 
       - name: Security regression checks
         run: |
@@ -96,6 +118,9 @@ jobs:
           grep -q '127.0.0.1:5678:5678' docker-compose.yml
           grep -q '127.0.0.1:3000:3000' docker-compose.yml
           grep -q '127.0.0.1:11434:11434' docker-compose.yml
+          grep -q 'N8N_EDITOR_BASE_URL: http://localhost:5678/' docker-compose.yml
+          grep -q './setup:/files/setup:ro' docker-compose.yml
+          grep -q 'setup/\*.runtime.json' .gitignore
           ! grep -q 'ollama-init:' docker-compose.yml
 
   docker-smoke:
@@ -121,8 +146,7 @@ jobs:
         run: |
           for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then
-              echo 'Ollama API: OK'
-              exit 0
+              echo 'Ollama API: OK'; exit 0
             fi
             sleep 2
           done
@@ -139,8 +163,7 @@ jobs:
         run: |
           for i in $(seq 1 90); do
             if curl -fsS http://127.0.0.1:5678/healthz >/dev/null; then
-              echo 'n8n: OK'
-              exit 0
+              echo 'n8n: OK'; exit 0
             fi
             sleep 2
           done
@@ -162,8 +185,7 @@ jobs:
         run: |
           for i in $(seq 1 60); do
             if curl -fsS http://127.0.0.1:3000/health >/dev/null; then
-              echo 'WAHA: OK'
-              exit 0
+              echo 'WAHA: OK'; exit 0
             fi
             sleep 2
           done
