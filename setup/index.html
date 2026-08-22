@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Configurar Sistema Agêntico</title>
+  <style>
+    :root{
+      color-scheme:dark;
+      --bg:#07101c;
+      --panel:#0e1928;
+      --panel2:#111f31;
+      --line:rgba(255,255,255,.09);
+      --text:#edf5ff;
+      --muted:#91a4ba;
+      --cyan:#50d8ff;
+      --blue:#6b8cff;
+      --green:#48e2a1;
+      --yellow:#ffd166;
+      --red:#ff718d;
+      --shadow:0 28px 80px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:
+      radial-gradient(circle at 15% 10%,rgba(80,216,255,.13),transparent 30%),
+      radial-gradient(circle at 85% 20%,rgba(107,140,255,.13),transparent 28%),
+      linear-gradient(145deg,#050b13,#091525 52%,#07101c);color:var(--text)}
+    button,input,select{font:inherit}
+    a{color:inherit}
+    .shell{max-width:1180px;margin:0 auto;padding:34px 22px 52px}
+    .topbar{display:flex;justify-content:space-between;gap:24px;align-items:center;margin-bottom:28px}
+    .brand{display:flex;align-items:center;gap:14px}
+    .brandmark{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(135deg,var(--cyan),var(--blue));box-shadow:0 12px 30px rgba(80,216,255,.18);font-size:23px}
+    .brand h1{font-size:17px;margin:0 0 4px;letter-spacing:.01em}.brand p{margin:0;color:var(--muted);font-size:13px}
+    .local{display:flex;gap:9px;align-items:center;padding:9px 12px;border:1px solid var(--line);border-radius:999px;color:#c4d4e6;font-size:12px;background:rgba(255,255,255,.035)}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 5px rgba(72,226,161,.08)}
+    .layout{display:grid;grid-template-columns:260px minmax(0,1fr);gap:22px}
+    .sidebar,.content{border:1px solid var(--line);background:rgba(12,24,39,.82);backdrop-filter:blur(18px);box-shadow:var(--shadow)}
+    .sidebar{border-radius:22px;padding:18px;height:max-content;position:sticky;top:20px}
+    .sidebar-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;padding:6px 9px 12px}
+    .step{display:flex;gap:12px;padding:14px 10px;border-radius:14px;color:var(--muted);transition:.2s}
+    .step.active{background:rgba(80,216,255,.08);color:var(--text)}
+    .step.done .step-num{background:rgba(72,226,161,.14);border-color:rgba(72,226,161,.35);color:var(--green)}
+    .step-num{width:30px;height:30px;border-radius:10px;border:1px solid var(--line);display:grid;place-items:center;font-size:12px;font-weight:800;flex:0 0 auto}
+    .step b{display:block;font-size:13px;margin:1px 0 3px}.step span{font-size:11px;line-height:1.45}
+    .content{border-radius:24px;overflow:hidden}
+    .hero{padding:34px 36px 28px;border-bottom:1px solid var(--line);background:linear-gradient(120deg,rgba(80,216,255,.06),rgba(107,140,255,.035))}
+    .eyebrow{font-size:11px;color:var(--cyan);font-weight:800;text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px}
+    .hero h2{font-size:31px;line-height:1.12;margin:0 0 12px;letter-spacing:-.025em}.hero p{margin:0;max-width:740px;color:#aabbd0;line-height:1.65;font-size:14px}
+    .body{padding:32px 36px 38px}.screen{display:none}.screen.active{display:block}
+    .section-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin-bottom:22px}.section-head h3{font-size:20px;margin:0 0 5px}.section-head p{margin:0;color:var(--muted);font-size:13px;line-height:1.5}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+    .field{margin-bottom:17px}.field label{display:flex;justify-content:space-between;gap:12px;margin-bottom:8px;font-size:12px;font-weight:700;color:#cad8e8}.field small{font-weight:400;color:var(--muted)}
+    input,select{width:100%;height:47px;padding:0 14px;border:1px solid var(--line);border-radius:12px;color:var(--text);background:#091421;outline:none;transition:.2s}
+    input:focus,select:focus{border-color:rgba(80,216,255,.55);box-shadow:0 0 0 4px rgba(80,216,255,.07)}
+    .hint{font-size:11px;color:var(--muted);line-height:1.55;margin-top:7px}
+    .notice{display:flex;gap:12px;padding:14px 15px;border:1px solid rgba(80,216,255,.17);background:rgba(80,216,255,.055);border-radius:14px;margin:5px 0 20px;color:#b9cee2;font-size:12px;line-height:1.55}.notice strong{color:var(--text)}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+    .btn{border:0;border-radius:12px;padding:12px 17px;font-weight:800;font-size:12px;cursor:pointer;transition:.18s;display:inline-flex;align-items:center;gap:8px;text-decoration:none}
+    .btn:hover{transform:translateY(-1px)}.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+    .primary{background:linear-gradient(135deg,var(--cyan),#7b8fff);color:#04101b;box-shadow:0 12px 28px rgba(80,216,255,.15)}
+    .secondary{background:#132337;color:#dceaff;border:1px solid var(--line)}
+    .ghost{background:transparent;color:#b7c8db;border:1px solid var(--line)}
+    .danger{background:rgba(255,113,141,.08);color:#ff9bad;border:1px solid rgba(255,113,141,.22)}
+    .status-card{padding:16px;border:1px solid var(--line);border-radius:15px;background:#0a1624}.status-top{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:9px}.status-card b{font-size:13px}.status-card p{margin:0;color:var(--muted);font-size:11px;line-height:1.5}.pill{font-size:10px;font-weight:800;padding:5px 8px;border-radius:999px;background:rgba(255,255,255,.05);color:var(--muted)}
+    .pill.ok{color:var(--green);background:rgba(72,226,161,.09)}.pill.warn{color:var(--yellow);background:rgba(255,209,102,.09)}.pill.err{color:var(--red);background:rgba(255,113,141,.09)}
+    .progress-wrap{margin:24px 0 18px}.progress-track{height:9px;background:#08111d;border-radius:999px;overflow:hidden;border:1px solid var(--line)}.progress{height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--blue));transition:width .35s ease}.progress-label{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-top:8px}
+    .terminal{margin-top:18px;border:1px solid var(--line);border-radius:15px;background:#050b12;overflow:hidden}.terminal-head{display:flex;justify-content:space-between;padding:10px 13px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted)}pre{margin:0;padding:15px;max-height:270px;overflow:auto;white-space:pre-wrap;color:#a7bad0;font:11px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace}
+    .integration{padding:18px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(145deg,#0b1725,#0e1b2b)}.integration h4{margin:0 0 6px;font-size:14px}.integration p{margin:0 0 14px;color:var(--muted);font-size:11px;line-height:1.55}.integration .tag{display:inline-block;margin-bottom:11px;font-size:10px;font-weight:800;color:var(--green);background:rgba(72,226,161,.08);border:1px solid rgba(72,226,161,.17);padding:5px 8px;border-radius:999px}.integration .tag.user{color:var(--yellow);background:rgba(255,209,102,.08);border-color:rgba(255,209,102,.17)}
+    .secret-row{display:grid;grid-template-columns:105px 1fr auto;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:11px}.secret-row span:first-child{color:var(--muted)}.secret-value{font-family:ui-monospace,Consolas,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mini{border:1px solid var(--line);background:#132337;color:#d8e6f5;border-radius:8px;padding:6px 8px;cursor:pointer;font-size:10px}
+    .success-box{text-align:center;padding:26px 18px 12px}.success-icon{width:72px;height:72px;margin:0 auto 18px;border-radius:24px;display:grid;place-items:center;background:rgba(72,226,161,.1);border:1px solid rgba(72,226,161,.2);font-size:31px;color:var(--green)}.success-box h3{font-size:25px;margin:0 0 9px}.success-box p{max-width:620px;margin:0 auto;color:var(--muted);line-height:1.65;font-size:13px}
+    .checklist{margin:26px auto 0;max-width:680px;text-align:left;border:1px solid var(--line);border-radius:16px;overflow:hidden}.check{display:flex;gap:11px;padding:13px 15px;border-bottom:1px solid var(--line);font-size:12px;color:#c9d8e7}.check:last-child{border:0}.check i{font-style:normal;color:var(--green);font-weight:900}
+    .toast{position:fixed;right:24px;bottom:24px;z-index:10;max-width:380px;padding:13px 15px;border-radius:13px;background:#132337;border:1px solid var(--line);box-shadow:var(--shadow);font-size:12px;color:#dceaff;opacity:0;transform:translateY(8px);pointer-events:none;transition:.22s}.toast.show{opacity:1;transform:none}
+    .spinner{width:14px;height:14px;border:2px solid rgba(4,16,27,.25);border-top-color:#04101b;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+    @media(max-width:860px){.layout{grid-template-columns:1fr}.sidebar{position:static;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}.sidebar-title{display:none}.step{display:block;padding:10px;text-align:center}.step-num{margin:0 auto 6px}.step span{display:none}.hero,.body{padding-left:22px;padding-right:22px}.grid2,.grid3{grid-template-columns:1fr}.topbar{align-items:flex-start}.local{display:none}}
+    @media(max-width:520px){.shell{padding:20px 12px 32px}.hero h2{font-size:25px}.sidebar{grid-template-columns:repeat(4,1fr)}.step b{font-size:10px}.secret-row{grid-template-columns:1fr}.secret-row .mini{width:max-content}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand"><div class="brandmark">◈</div><div><h1>Sistema Agêntico</h1><p>n8n · Ollama · WhatsApp · Email · QA</p></div></div>
+    <div class="local"><span class="dot"></span> Assistente local · 127.0.0.1</div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-title">Configuração</div>
+      <div class="step active" data-step="1"><div class="step-num">1</div><div><b>Preferências</b><span>Configuração mínima</span></div></div>
+      <div class="step" data-step="2"><div class="step-num">2</div><div><b>Instalação</b><span>Docker e serviços</span></div></div>
+      <div class="step" data-step="3"><div class="step-num">3</div><div><b>Conexões</b><span>Contas e WhatsApp</span></div></div>
+      <div class="step" data-step="4"><div class="step-num">4</div><div><b>Pronto</b><span>Sistema disponível</span></div></div>
+    </aside>
+
+    <main class="content">
+      <div class="hero">
+        <div class="eyebrow">Instalação guiada</div>
+        <h2 id="heroTitle">Configure sem editar arquivos.</h2>
+        <p id="heroText">O assistente prepara o ambiente local, gera segredos internos e instala os serviços. Você informa somente dados que pertencem a você.</p>
+      </div>
+      <div class="body">
+        <section class="screen active" id="screen1">
+          <div class="section-head"><div><h3>Preferências iniciais</h3><p>Esses dados ficam somente no arquivo <code>.env</code> do seu computador.</p></div></div>
+          <div class="notice"><div>🔐</div><div><strong>Você não precisa criar chaves internas.</strong> Banco, criptografia do n8n, API do WAHA e senha do painel são gerados automaticamente. A LLM roda localmente pelo Ollama, sem API paga.</div></div>
+          <div class="field">
+            <label>E-mail para aprovações humanas <small>opcional agora</small></label>
+            <input id="approvalEmail" type="email" placeholder="voce@gmail.com" autocomplete="email">
+            <div class="hint">Receberá os links de Aprovar/Rejeitar antes de apagar e-mails ou enviar mensagens pelo agente.</div>
+          </div>
+          <div class="grid2">
+            <div class="field"><label>Modelo principal</label><select id="model"><option value="qwen3:1.7b">Qwen3 1.7B · mais leve</option><option value="qwen3:4b" selected>Qwen3 4B · recomendado</option><option value="qwen3:8b">Qwen3 8B · melhor qualidade</option></select><div class="hint">O modelo será baixado automaticamente na primeira instalação.</div></div>
+            <div class="field"><label>Modelo validador</label><select id="validatorModel"><option value="same" selected>Mesmo modelo principal</option><option value="qwen3:1.7b">Qwen3 1.7B</option><option value="qwen3:4b">Qwen3 4B</option><option value="qwen3:8b">Qwen3 8B</option></select><div class="hint">O segundo agente revisa a saída do primeiro antes da resposta final.</div></div>
+          </div>
+          <div class="field"><label>Fuso horário</label><select id="timezone"><option value="America/Sao_Paulo" selected>Brasil · São Paulo (BRT)</option><option value="America/Manaus">Brasil · Manaus</option><option value="America/Recife">Brasil · Recife</option><option value="UTC">UTC</option></select></div>
+          <div class="actions"><button class="btn primary" id="installBtn" onclick="beginInstall()">Instalar e configurar automaticamente →</button><button class="btn ghost" onclick="refreshStatus(true)">Verificar computador</button></div>
+        </section>
+
+        <section class="screen" id="screen2">
+          <div class="section-head"><div><h3>Preparando o ambiente</h3><p>Não feche esta página enquanto o modelo estiver sendo baixado.</p></div><span class="pill warn" id="installState">aguardando</span></div>
+          <div class="grid3">
+            <div class="status-card"><div class="status-top"><b>Docker</b><span class="pill" id="dockerPill">verificando</span></div><p>Engine e Docker Compose.</p></div>
+            <div class="status-card"><div class="status-top"><b>Ollama</b><span class="pill" id="ollamaPill">aguardando</span></div><p>LLM local e modelo selecionado.</p></div>
+            <div class="status-card"><div class="status-top"><b>PostgreSQL</b><span class="pill" id="pgPill">aguardando</span></div><p>Persistência do n8n e execuções.</p></div>
+            <div class="status-card"><div class="status-top"><b>n8n</b><span class="pill" id="n8nPill">aguardando</span></div><p>Orquestração e agentes.</p></div>
+            <div class="status-card"><div class="status-top"><b>WAHA</b><span class="pill" id="wahaPill">aguardando</span></div><p>Bridge local para WhatsApp.</p></div>
+            <div class="status-card"><div class="status-top"><b>Workflow</b><span class="pill" id="workflowPill">depois</span></div><p>Importado após criar o acesso n8n.</p></div>
+          </div>
+          <div class="progress-wrap"><div class="progress-track"><div class="progress" id="progress"></div></div><div class="progress-label"><span id="progressText">Iniciando…</span><span id="progressPct">0%</span></div></div>
+          <div class="terminal"><div class="terminal-head"><span>Detalhes técnicos</span><span>somente local</span></div><pre id="log">Aguardando início da instalação…</pre></div>
+          <div class="actions"><button class="btn secondary" id="retryBtn" onclick="beginInstall()" style="display:none">Tentar novamente</button></div>
+        </section>
+
+        <section class="screen" id="screen3">
+          <div class="section-head"><div><h3>Conecte suas contas</h3><p>Agora entram apenas autorizações pessoais que não podem ser fabricadas pelo instalador.</p></div></div>
+          <div class="grid2">
+            <div class="integration"><span class="tag user">1 · uma vez</span><h4>Conta local do n8n</h4><p>Crie o usuário proprietário da sua instalação. É um login local, não uma chave externa.</p><a class="btn secondary" href="http://127.0.0.1:5678" target="_blank">Abrir n8n</a><button class="btn primary" style="margin-top:9px" onclick="finalizeSetup()">Já criei meu acesso →</button></div>
+            <div class="integration"><span class="tag">Automático</span><h4>Ollama / LLM local</h4><p>O servidor e o modelo já foram instalados. O workflow usa <code>http://ollama:11434</code> dentro do Docker.</p><div class="secret-row"><span>Base URL</span><span class="secret-value">http://ollama:11434</span><button class="mini" onclick="copyText('http://ollama:11434')">copiar</button></div></div>
+            <div class="integration"><span class="tag user">Autorização</span><h4>Gmail + Google Calendar</h4><p>O Google exige OAuth2 no navegador. Após o workflow aparecer no n8n, conecte sua conta nos nós Gmail e Calendar.</p><a class="btn secondary" href="http://127.0.0.1:5678/home/credentials" target="_blank">Abrir credenciais do n8n</a></div>
+            <div class="integration"><span class="tag user">QR Code</span><h4>WhatsApp / WAHA</h4><p>Use as credenciais geradas localmente e escaneie o QR Code da sessão <code>default</code>.</p><div class="secret-row"><span>Usuário</span><span class="secret-value" id="wahaUser">admin</span><button class="mini" onclick="copyEl('wahaUser')">copiar</button></div><div class="secret-row"><span>Senha</span><span class="secret-value" id="wahaPass">••••••••••••</span><button class="mini" onclick="toggleSecret()">mostrar</button></div><a class="btn secondary" style="margin-top:12px" href="http://127.0.0.1:3000/dashboard" target="_blank">Abrir WAHA</a></div>
+          </div>
+          <div class="notice" style="margin-top:20px"><div>✓</div><div>O sistema <strong>não envia seus tokens Google nem dados de WhatsApp ao GitHub</strong>. Essas autorizações ficam na instalação local.</div></div>
+        </section>
+
+        <section class="screen" id="screen4">
+          <div class="success-box"><div class="success-icon">✓</div><h3>Ambiente preparado.</h3><p>O núcleo do Sistema Agêntico está instalado e o workflow foi verificado. Depois de autorizar Google e parear o WhatsApp, você pode ativar o fluxo e usar o agente.</p></div>
+          <div class="checklist"><div class="check"><i>✓</i> Docker Compose validado e serviços isolados em localhost</div><div class="check"><i>✓</i> PostgreSQL e Ollama saudáveis</div><div class="check"><i>✓</i> Modelo local instalado e validado</div><div class="check"><i>✓</i> n8n e WAHA disponíveis</div><div class="check"><i>✓</i> Workflow agêntico importado sem duplicação</div><div class="check"><i>✓</i> Segredos internos gerados apenas no seu computador</div></div>
+          <div class="actions" style="justify-content:center"><a class="btn primary" href="http://127.0.0.1:5678" target="_blank">Abrir n8n</a><a class="btn secondary" href="http://127.0.0.1:3000/dashboard" target="_blank">Abrir WhatsApp</a><button class="btn ghost" onclick="finishWizard()">Fechar assistente</button></div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+  let currentStep=1,secretVisible=false,wahaPassword='';
+  const titles={1:['Configure sem editar arquivos.','O assistente prepara o ambiente local, gera segredos internos e instala os serviços. Você informa somente dados que pertencem a você.'],2:['Instalação automática em andamento.','O progresso abaixo reflete o bootstrap local. Downloads podem levar alguns minutos dependendo da conexão.'],3:['Só faltam autorizações pessoais.','Google OAuth e QR Code exigem consentimento do usuário. Todo o restante é preparado automaticamente.'],4:['Tudo pronto para usar.','Seu ambiente local foi preparado com verificações de saúde, importação do workflow e configurações seguras.']};
+  function goStep(n){currentStep=n;document.querySelectorAll('.screen').forEach((e,i)=>e.classList.toggle('active',i===n-1));document.querySelectorAll('.step').forEach((e,i)=>{e.classList.toggle('active',i===n-1);e.classList.toggle('done',i<n-1)});document.getElementById('heroTitle').textContent=titles[n][0];document.getElementById('heroText').textContent=titles[n][1];}
+  function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),3000)}
+  function setPill(id,state,label){const el=document.getElementById(id);el.className='pill '+(state||'');el.textContent=label}
+  function progress(p,text){document.getElementById('progress').style.width=p+'%';document.getElementById('progressPct').textContent=p+'%';document.getElementById('progressText').textContent=text}
+  async function api(path,opts={}){const r=await fetch(path,{headers:{'Content-Type':'application/json'},...opts});let data={};try{data=await r.json()}catch{}if(!r.ok)throw new Error(data.error||('Erro HTTP '+r.status));return data}
+  async function refreshStatus(showToast=false){try{const s=await api('/api/status');setPill('dockerPill',s.docker?'ok':'err',s.docker?'pronto':'indisponível');setPill('ollamaPill',s.ollama?'ok':'',s.ollama?'online':'aguardando');setPill('pgPill',s.postgres?'ok':'',s.postgres?'online':'aguardando');setPill('n8nPill',s.n8n?'ok':'',s.n8n?'online':'aguardando');setPill('wahaPill',s.waha?'ok':'',s.waha?'online':'aguardando');setPill('workflowPill',s.workflow?'ok':'',s.workflow?'importado':'depois');if(s.wahaUser)document.getElementById('wahaUser').textContent=s.wahaUser;if(s.wahaPassword){wahaPassword=s.wahaPassword;if(secretVisible)document.getElementById('wahaPass').textContent=wahaPassword}if(showToast)toast(s.docker?'Docker está pronto.':'Docker Desktop ainda não está disponível.');if(s.setupComplete){goStep(4)}return s}catch(e){if(showToast)toast(e.message)}}
+  async function loadConfig(){try{const c=await api('/api/config');if(c.approvalEmail)document.getElementById('approvalEmail').value=c.approvalEmail;if(c.model)document.getElementById('model').value=c.model;if(c.validatorModel){document.getElementById('validatorModel').value=c.validatorModel===c.model?'same':c.validatorModel}if(c.timezone)document.getElementById('timezone').value=c.timezone;if(c.wahaPassword)wahaPassword=c.wahaPassword}catch{}}
+  async function saveConfig(){const model=document.getElementById('model').value;const val=document.getElementById('validatorModel').value;return api('/api/config',{method:'POST',body:JSON.stringify({approvalEmail:document.getElementById('approvalEmail').value.trim(),model,validatorModel:val==='same'?model:val,timezone:document.getElementById('timezone').value})})}
+  async function beginInstall(){const btn=document.getElementById('installBtn');if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Preparando…'}document.getElementById('retryBtn').style.display='none';try{await saveConfig();goStep(2);setPill('installState','warn','instalando');progress(12,'Validando Docker e configuração');document.getElementById('log').textContent='Preparando ambiente local…\n';const pulse=setInterval(async()=>{const p=parseInt(document.getElementById('progressPct').textContent)||12;if(p<82)progress(Math.min(p+4,82),'Instalando serviços e verificando saúde');await refreshStatus(false)},2600);const result=await api('/api/install',{method:'POST',body:'{}'});clearInterval(pulse);document.getElementById('log').textContent=result.log||'Instalação concluída.';await refreshStatus(false);progress(90,'Infraestrutura pronta');setPill('installState','ok','infraestrutura pronta');setTimeout(()=>goStep(3),700)}catch(e){document.getElementById('log').textContent+=("\n\nERRO: "+e.message);setPill('installState','err','falhou');progress(0,'Corrija o item indicado e tente novamente');document.getElementById('retryBtn').style.display='inline-flex';toast(e.message)}finally{if(btn){btn.disabled=false;btn.textContent='Instalar e configurar automaticamente →'}}}
+  async function finalizeSetup(){try{const result=await api('/api/finalize',{method:'POST',body:'{}'});if(result.needsOwner){toast('Conclua primeiro o cadastro local do n8n na aba aberta.');window.open('http://127.0.0.1:5678','_blank');return}if(result.log)document.getElementById('log').textContent=result.log;await refreshStatus(false);goStep(4)}catch(e){toast(e.message)}}
+  async function finishWizard(){try{await api('/api/shutdown',{method:'POST',body:'{}'});window.close();document.body.innerHTML='<div style="font-family:system-ui;background:#07101c;color:white;min-height:100vh;display:grid;place-items:center"><div style="text-align:center"><h2>Assistente concluído</h2><p style="color:#91a4ba">Você pode fechar esta aba.</p></div></div>'}catch{window.close()}}
+  function copyText(v){navigator.clipboard.writeText(v);toast('Copiado para a área de transferência.')}function copyEl(id){copyText(document.getElementById(id).textContent)}
+  function toggleSecret(){secretVisible=!secretVisible;document.getElementById('wahaPass').textContent=secretVisible?(wahaPassword||'indisponível'):'••••••••••••'}
+  loadConfig().then(()=>refreshStatus(false));
+</script>
+</body>
+</html>
