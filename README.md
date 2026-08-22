@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/berger33/leadflow-local-first/actions/workflows/ci.yml/badge.svg)](https://github.com/berger33/leadflow-local-first/actions/workflows/ci.yml)
 
-> Evolução do LeadFlow para um sistema centrado em orquestração agêntica, segurança operacional, QA e experiência de instalação reproduzível.
+> Evolução do LeadFlow para um sistema centrado em orquestração agêntica, segurança operacional, QA e uma experiência de instalação orientada a produto.
 
 <p align="center">
   <strong>🤖 Agente Executor</strong> · <strong>🧪 Agente QA</strong> · <strong>🛡️ Human-in-the-loop</strong> · <strong>📧 Gmail</strong> · <strong>💬 WhatsApp</strong> · <strong>📅 Calendar</strong>
@@ -20,7 +20,7 @@ A demo pública permite entender Function Calling, dual-agent, aprovação human
 
 # Instalação visual no Windows
 
-A forma recomendada de instalar o projeto é usar o assistente visual incluído no repositório.
+A experiência recomendada foi desenhada para que um novo usuário **não precise editar `.env`, criar chaves internas nem importar o workflow manualmente**.
 
 ## Requisitos
 
@@ -49,9 +49,9 @@ ou simplesmente:
 INICIAR_WINDOWS.bat
 ```
 
-Se a instalação ainda não estiver concluída, `INICIAR_WINDOWS.bat` detecta automaticamente a primeira execução e abre o instalador visual.
+Se a instalação ainda não estiver concluída, `INICIAR_WINDOWS.bat` detecta a primeira execução e abre automaticamente o assistente visual.
 
-## Assistente visual
+## Uma única tela de configuração
 
 O navegador abre localmente em:
 
@@ -59,42 +59,48 @@ O navegador abre localmente em:
 http://127.0.0.1:8765
 ```
 
-A interface possui quatro etapas:
+Antes de instalar, o usuário informa em uma única tela:
 
-```text
-Preferências
-    ↓
-Instalação
-    ↓
-Conexões pessoais
-    ↓
-Pronto
-```
+### Acesso local do n8n
 
-### 1. Preferências
+- nome;
+- sobrenome;
+- e-mail de login;
+- senha local.
 
-O usuário pode informar pela própria tela:
+A senha fica apenas em memória durante a instalação. Ela **não é escrita no `.env` nem em arquivo temporário**.
 
-- e-mail que receberá aprovações Human-in-the-loop;
-- modelo Ollama principal;
-- modelo do Agente QA;
-- fuso horário;
+Quando o n8n sobe pela primeira vez, o assistente utiliza o endpoint local de setup da própria instância para criar o proprietário automaticamente.
+
+### Preferências do agente
+
+- e-mail para aprovações Human-in-the-loop;
+- modelo Ollama do Agente Executor;
+- modelo Ollama do Agente QA;
+- fuso horário.
+
+### Google OAuth2 — opcional durante a instalação
+
+A mesma tela aceita:
+
 - Google OAuth Client ID;
 - Google OAuth Client Secret.
 
-Os campos Google são opcionais no primeiro momento.
-
-A interface também mostra a URI OAuth que deve ser cadastrada no Google Cloud:
+Ela mostra a URI de redirecionamento que deve ser cadastrada no Google Cloud:
 
 ```text
 http://localhost:5678/rest/oauth2-credential/callback
 ```
 
-### 2. Instalação automática
+Se Client ID e Client Secret forem fornecidos, o sistema prepara automaticamente as credenciais Gmail e Calendar e as referencia nos respectivos nós. Depois resta apenas o **consentimento OAuth no navegador**, que obrigatoriamente pertence ao usuário da conta Google.
 
-O assistente executa por baixo um bootstrap idempotente que:
+---
+
+# O que acontece ao clicar em “Instalar e configurar automaticamente”
 
 ```text
+valida o formulário
+      ↓
 verifica Docker
       ↓
 cria/repara .env
@@ -103,98 +109,118 @@ gera segredos internos aleatórios
       ↓
 valida Docker Compose
       ↓
-remove containers legados conflitantes
+remove conflitos de versões antigas
       ↓
 inicia PostgreSQL + Ollama
       ↓
-health checks
+executa health checks
       ↓
-verifica modelo local
+verifica o modelo escolhido
       ↓
-baixa modelo se necessário, com retry
+baixa com retry se necessário
       ↓
 inicia n8n + WAHA
       ↓
-health checks
+executa novos health checks
+      ↓
+cria o proprietário local do n8n
+      ↓
+cria a credencial Ollama
+      ↓
+prepara Gmail/Calendar se informado
+      ↓
+gera uma cópia temporária do workflow com as referências
+      ↓
+importa e verifica o workflow
+      ↓
+apaga os arquivos temporários
+      ↓
+marca a instalação como concluída
 ```
 
-A tela apresenta o estado de Docker, PostgreSQL, Ollama, n8n, WAHA e workflow, além de uma área de detalhes técnicos para diagnóstico.
+Durante o processo, a interface exibe cards de status para Docker, PostgreSQL, Ollama, n8n, WAHA e workflow, barra de progresso e detalhes técnicos para diagnóstico.
 
-### 3. Conexões pessoais
+---
 
-Quando a infraestrutura está pronta, o instalador guia apenas as etapas que realmente dependem da identidade do usuário.
+# Depois da instalação
 
-#### n8n
+## Ollama
 
-Na primeira instalação o n8n exige a criação do proprietário local. O assistente abre a página e, quando o cadastro termina, continua a configuração.
+A conexão é automática.
 
-#### Ollama
-
-A conexão Ollama é **automática**.
-
-O bootstrap cria uma credencial n8n apontando para:
+O bootstrap cria no n8n a credencial:
 
 ```text
-http://ollama:11434
+Ollama Local - Sistema Agentico
 ```
 
-e a vincula aos dois modelos do workflow durante a importação.
+com:
 
-Nenhuma chave de API é necessária na instalação Ollama padrão.
+```text
+Base URL: http://ollama:11434
+```
 
-#### Gmail + Google Calendar
+Ela é associada automaticamente aos dois modelos do workflow.
 
-Se `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` foram informados na tela, o bootstrap cria automaticamente:
+A instalação local padrão não exige API key de IA.
 
-- credencial Gmail OAuth2;
-- credencial Google Calendar OAuth2;
-- referências dessas credenciais nos respectivos nós do workflow.
+## Gmail + Google Calendar
 
-O usuário ainda precisa clicar em **Sign in with Google** no n8n para conceder consentimento OAuth. Esse consentimento não é automatizado deliberadamente.
+Se as chaves Google foram preenchidas no assistente, as credenciais já estarão preparadas e vinculadas.
 
-Se as chaves não forem informadas durante a instalação, as credenciais Google podem ser criadas manualmente depois sem impedir o restante do sistema de subir.
+O usuário faz login no n8n com o acesso criado durante a instalação e conclui o consentimento Google em **Credentials**.
 
-#### WhatsApp
+Se preferir não fornecer Client ID/Secret na instalação, Gmail e Calendar podem ser configurados depois sem impedir a instalação do núcleo.
 
-WAHA recebe automaticamente:
+## WhatsApp / WAHA
 
-- API key local aleatória;
+O sistema gera automaticamente:
+
+- API key local;
 - usuário do dashboard;
 - senha forte aleatória;
-- sessão `default`.
+- webhook apontando para o n8n;
+- sessão padrão `default`.
 
-A interface mostra usuário e senha localmente. O usuário só precisa abrir o WAHA e escanear o QR Code do próprio WhatsApp.
+Na etapa **Conexões**, a interface exibe usuário e senha com ações de copiar/revelar.
 
-### 4. Pronto
+O único passo obrigatório é abrir o WAHA e **escanear o QR Code do próprio WhatsApp**, pois isso representa consentimento da conta real.
 
-Depois da finalização, o projeto cria localmente:
+## Próximas execuções
+
+Depois da instalação, é criado localmente:
 
 ```text
 .setup-complete
 ```
 
-Nas próximas vezes, `INICIAR_WINDOWS.bat` não abre novamente o assistente: ele apenas inicia o stack e abre os serviços.
+Nas próximas vezes:
+
+```text
+INICIAR_WINDOWS.bat
+```
+
+apenas inicia o stack existente e verifica os serviços. O wizard não reaparece desnecessariamente.
 
 ---
 
-# O que é automatizado e o que exige consentimento
+# Automação x consentimento
 
-| Etapa | Automática | Usuário precisa agir |
-| --- | :---: | --- |
-| PostgreSQL | ✅ | — |
-| Chave de criptografia n8n | ✅ | — |
-| API key WAHA | ✅ | — |
-| Senha do dashboard WAHA | ✅ | — |
-| Ollama | ✅ | — |
-| Download do modelo | ✅ | — |
-| Credencial Ollama no n8n | ✅ | — |
-| Importação do workflow | ✅ | — |
-| Google OAuth Client ID/Secret | opcional pela tela | informar se quiser auto-configurar |
-| Consentimento Google OAuth | — | ✅ obrigatório pelo Google |
-| Pareamento WhatsApp | — | ✅ QR Code |
-| Primeiro usuário local n8n | — | ✅ uma vez |
+| Etapa | Tratamento |
+| --- | --- |
+| PostgreSQL | ✅ automático |
+| Chave de criptografia do n8n | ✅ automática |
+| API key e senha do WAHA | ✅ automáticas |
+| Ollama | ✅ automático |
+| Download/validação do modelo | ✅ automático |
+| Primeiro proprietário do n8n | ✅ criado pela UI com os dados escolhidos pelo usuário |
+| Credencial Ollama no n8n | ✅ automática |
+| Importação e verificação do workflow | ✅ automática |
+| Gmail/Calendar com Client ID/Secret fornecidos | ✅ credenciais preparadas automaticamente |
+| Consentimento Google OAuth | 👤 usuário autoriza no Google |
+| Pareamento WhatsApp | 👤 usuário escaneia o QR Code |
 
-A filosofia é simples: **automatizar configuração técnica; nunca automatizar consentimento de identidade**.
+A filosofia é: **automatizar toda configuração técnica que pode ser reproduzida; preservar intervenção humana onde existe identidade, consentimento ou efeito externo.**
 
 ---
 
@@ -316,47 +342,52 @@ A regra de projeto é: **quem executa não é o mesmo componente que valida**.
 # Segurança e privacidade
 
 - portas administrativas vinculadas a `127.0.0.1`;
+- setup UI vinculada somente a `127.0.0.1:8765`;
 - `.env` ignorado pelo Git;
-- arquivos temporários de credenciais ignorados e removidos após importação;
+- senha do proprietário n8n mantida somente em memória durante o setup;
+- arquivos temporários de credenciais ignorados pelo Git e removidos após a importação;
 - segredos internos gerados localmente;
 - tokens OAuth não são versionados;
 - sessão do WhatsApp permanece local;
 - ações sensíveis possuem `Wait` + aprovação humana;
 - audit trail registra input, ferramentas, parâmetros, resultados e output;
 - raw chain-of-thought não é persistido;
-- setup UI escuta somente em `127.0.0.1` e envia cabeçalhos de segurança básicos.
+- cabeçalhos de segurança básicos são enviados pela UI local.
 
-Consulte também [`SECURITY.md`](SECURITY.md).
+Consulte também [`SECURITY.md`](SECURITY.md) e [`docs/CREDENTIALS_SETUP.md`](docs/CREDENTIALS_SETUP.md).
 
 ---
 
 # Qualidade e CI
 
-O GitHub Actions valida:
+O GitHub Actions valida estaticamente:
 
 - JSON do workflow;
 - dois agentes;
 - cinco tools;
 - dois gates Human-in-the-loop;
-- HTML do instalador visual;
-- IDs e endpoints exigidos pela UI;
-- sintaxe de `bootstrap.ps1`;
-- sintaxe de `setup-wizard.ps1`;
-- contrato das fases `Prepare`, `Finalize` e `Start`;
-- importação programática de credenciais;
+- estrutura e IDs obrigatórios do instalador visual;
+- sintaxe de `bootstrap.ps1` e `setup-wizard.ps1`;
+- fases `Prepare`, `Finalize` e `Start`;
+- contratos de importação de credenciais/workflow;
 - Docker Compose;
 - bind local das portas;
-- ausência de `ollama-init`;
+- ausência do antigo `ollama-init`;
 - padrões comuns de vazamento de segredo.
 
-O smoke test Docker sobe:
+O smoke test Docker sobe PostgreSQL, Ollama, n8n e WAHA e também executa:
 
-- PostgreSQL;
-- Ollama;
-- n8n;
-- WAHA.
+1. `ollama pull` real de um modelo pequeno;
+2. `ollama show`;
+3. validação do estado de primeira execução do n8n;
+4. criação de um proprietário de teste pelo endpoint local de setup;
+5. execução real da fase `Finalize` do bootstrap;
+6. importação de credencial Ollama;
+7. importação do workflow;
+8. verificação do workflow pelo CLI;
+9. confirmação de que arquivos temporários foram removidos.
 
-E executa um `ollama pull` real de modelo pequeno para validar o caminho de download que anteriormente causava falha em algumas instalações.
+Assim o CI testa o mesmo caminho crítico usado pelo instalador, e não somente sintaxe de YAML/JSON.
 
 ---
 
@@ -384,7 +415,7 @@ docker compose config
 docker compose up -d
 ```
 
-O bootstrap também pode ser executado em fases:
+O bootstrap pode ser executado em fases:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -Mode Prepare
@@ -429,7 +460,7 @@ leadflow-local-first/
 
 **Versão 2.2 — Guided Setup**
 
-O projeto possui instalador visual local, bootstrap autorreparável, configuração automática da LLM local, preparação opcional das credenciais Google e uma separação explícita entre automação técnica e consentimento de contas pessoais.
+O projeto possui instalação visual local em uma única tela, bootstrap autorreparável, criação assistida do proprietário n8n, LLM e credencial Ollama automáticas, preparação opcional de Gmail/Calendar e uma fronteira explícita entre automação técnica e consentimento de contas pessoais.
 
 ## Autor
 
