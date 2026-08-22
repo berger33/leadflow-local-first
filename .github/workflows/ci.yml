@@ -53,17 +53,90 @@ jobs:
 
           print(f'Workflow válido: {len(data["nodes"])} nós, dual-agent, 5 tools e 2 gates HITL.')
 
-      - name: Validate Docker Compose syntax
+      - name: Prepare CI environment
         run: |
           cp .env.example .env
           sed -i 's/CHANGE_ME_STRONG_DATABASE_PASSWORD/test-database-password/' .env
           sed -i 's/CHANGE_ME_64_CHARS_OR_MORE/test-encryption-key-012345678901234567890123456789/' .env
           sed -i 's/CHANGE_ME_32_CHARS_OR_MORE/test-waha-api-key-01234567890123456789/' .env
           sed -i 's/CHANGE_ME_STRONG_PASSWORD/test-dashboard-password/' .env
-          docker compose config --quiet
+          sed -i 's/seu-email@gmail.com/ci@example.com/' .env
+
+      - name: Validate Docker Compose syntax
+        run: docker compose config --quiet
+
+      - name: Validate Windows bootstrap PowerShell syntax
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/bootstrap.ps1'),
+            [ref]$null,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Error
+            exit 1
+          }
+          Write-Host 'bootstrap.ps1 syntax: OK'
 
       - name: Security regression checks
         run: |
           ! grep -R -nE '(AIza[0-9A-Za-z_-]{30,}|ghp_[0-9A-Za-z]{20,}|-----BEGIN PRIVATE KEY-----)' . --exclude-dir=.git
           grep -q '127.0.0.1:5678:5678' docker-compose.yml
           grep -q '127.0.0.1:3000:3000' docker-compose.yml
+          grep -q '127.0.0.1:11434:11434' docker-compose.yml
+          ! grep -q 'ollama-init:' docker-compose.yml
+
+  docker-smoke:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare CI environment
+        run: |
+          cp .env.example .env
+          sed -i 's/CHANGE_ME_STRONG_DATABASE_PASSWORD/test-database-password/' .env
+          sed -i 's/CHANGE_ME_64_CHARS_OR_MORE/test-encryption-key-012345678901234567890123456789/' .env
+          sed -i 's/CHANGE_ME_32_CHARS_OR_MORE/test-waha-api-key-01234567890123456789/' .env
+          sed -i 's/CHANGE_ME_STRONG_PASSWORD/test-dashboard-password/' .env
+          sed -i 's/seu-email@gmail.com/ci@example.com/' .env
+
+      - name: Start core containers
+        run: docker compose up -d postgres ollama n8n
+
+      - name: Wait for Ollama
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:11434/api/tags >/dev/null; then
+              echo 'Ollama: OK'
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs ollama
+          exit 1
+
+      - name: Verify Ollama CLI
+        run: docker compose exec -T ollama ollama list
+
+      - name: Wait for n8n
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:5678/healthz >/dev/null; then
+              echo 'n8n: OK'
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs n8n
+          exit 1
+
+      - name: Show final service state
+        run: docker compose ps
+
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans
