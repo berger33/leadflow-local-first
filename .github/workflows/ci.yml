@@ -46,9 +46,10 @@ jobs:
 
           html = Path('setup/index.html').read_text(encoding='utf-8')
           required_ids = {
+              'ownerFirstName','ownerLastName','ownerEmail','ownerPassword',
               'approvalEmail','model','validatorModel','timezone','googleClientId',
-              'googleClientSecret','googleCallback','installBtn','finalizeBtn',
-              'wahaUser','wahaPass','progress','log'
+              'googleClientSecret','googleCallback','installBtn','wahaUser','wahaPass',
+              'progress','log','ownerLoginSummary'
           }
           class P(HTMLParser):
               def __init__(self):
@@ -59,9 +60,9 @@ jobs:
           p=P(); p.feed(html)
           missing=required_ids-p.ids
           assert not missing, f'IDs obrigatórios da UI ausentes: {sorted(missing)}'
-          assert '/api/config' in html and '/api/install' in html and '/api/finalize' in html
+          assert '/api/config' in html and '/api/install' in html and '/api/status' in html
           assert 'http://localhost:5678/rest/oauth2-credential/callback' in html
-          assert 'Configure sem editar arquivos' in html
+          assert 'Instalar e configurar automaticamente' in html
           print('Visual installer HTML contract: OK')
 
       - name: Prepare CI environment
@@ -105,9 +106,9 @@ jobs:
           grep -q 'Ollama Local - Sistema Agentico' scripts/bootstrap.ps1
           grep -q 'Gmail - Sistema Agentico' scripts/bootstrap.ps1
           grep -q 'Google Calendar - Sistema Agentico' scripts/bootstrap.ps1
+          grep -q '/rest/owner/setup' scripts/setup-wizard.ps1
           grep -q '/api/config' scripts/setup-wizard.ps1
           grep -q '/api/install' scripts/setup-wizard.ps1
-          grep -q '/api/finalize' scripts/setup-wizard.ps1
           grep -q 'GOOGLE_CLIENT_ID' .env.example
           grep -q 'GOOGLE_CLIENT_SECRET' .env.example
           grep -q 'http://localhost:5678/rest/oauth2-credential/callback' .env.example
@@ -170,16 +171,42 @@ jobs:
           docker compose logs n8n
           exit 1
 
-      - name: Validate n8n first-run settings endpoint
+      - name: Validate n8n first-run state
         run: |
-          curl -fsS http://127.0.0.1:5678/rest/settings > /tmp/n8n-settings.json
+          curl -fsS http://127.0.0.1:5678/rest/settings > /tmp/n8n-settings-before.json
           python - <<'PY'
           import json
-          data = json.load(open('/tmp/n8n-settings.json', encoding='utf-8'))
-          value = data['data']['userManagement']['showSetupOnFirstLoad']
-          assert isinstance(value, bool), value
-          print('n8n showSetupOnFirstLoad contract: OK ->', value)
+          data=json.load(open('/tmp/n8n-settings-before.json', encoding='utf-8'))
+          assert data['data']['userManagement']['showSetupOnFirstLoad'] is True
+          print('n8n starts in owner-setup state: OK')
           PY
+
+      - name: Create n8n owner through official local endpoint
+        run: |
+          curl -fsS -X POST http://127.0.0.1:5678/rest/owner/setup \
+            -H 'Content-Type: application/json' \
+            -d '{"email":"ci@example.com","firstName":"CI","lastName":"Setup","password":"CiPassword1"}' >/tmp/owner.json
+          curl -fsS http://127.0.0.1:5678/rest/settings > /tmp/n8n-settings-after.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/n8n-settings-after.json', encoding='utf-8'))
+          assert data['data']['userManagement']['showSetupOnFirstLoad'] is False
+          print('n8n owner setup endpoint: OK')
+          PY
+
+      - name: Validate bootstrap finalization end to end
+        shell: pwsh
+        run: |
+          ./scripts/bootstrap.ps1 -Mode Finalize -NoOpen -NonInteractive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify imported workflow and cleanup
+        run: |
+          docker compose exec -T n8n n8n list:workflow | tee /tmp/workflows.txt
+          grep -q 'Sistema Agêntico n8n WhatsApp+Email' /tmp/workflows.txt
+          test -f .setup-complete
+          test ! -f setup/credentials.runtime.json
+          test ! -f setup/workflow.runtime.json
 
       - name: Wait for WAHA
         run: |
