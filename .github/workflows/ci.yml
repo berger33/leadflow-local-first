@@ -38,22 +38,30 @@ jobs:
           assert nodes['enviar_whatsapp']['type'] == '@n8n/n8n-nodes-langchain.toolWorkflow'
           print(f'Workflow válido: {len(data["nodes"])} nós, dual-agent, 5 tools e 2 gates HITL.')
 
-      - name: Validate visual installer HTML contract
+      - name: Validate visual installer UTF-8 and layout contract
         shell: python
         run: |
           from html.parser import HTMLParser
           from pathlib import Path
 
-          html = Path('setup/index.html').read_text(encoding='utf-8')
+          path = Path('setup/app.html')
+          raw = path.read_bytes()
+          html = raw.decode('utf-8')
+          assert 'Configuração inicial' in html
+          assert 'Preferências' in html
+          assert 'Conexões pessoais' in html
+          assert 'aprovações humanas' in html
+          assert 'ConfiguraÃ' not in html and 'PreferÃ' not in html and 'ConexÃ' not in html
+          assert '<meta charset="utf-8">' in html.lower()
+
           required_ids = {
               'ownerFirstName','ownerLastName','ownerEmail','ownerPassword',
               'approvalEmail','model','validatorModel','timezone','googleClientId',
-              'googleClientSecret','googleCallback','installBtn','wahaUser','wahaPass',
-              'progress','log','ownerLoginSummary'
+              'googleClientSecret','googleCallback','installBtn','wahaUser',
+              'wahaPassword','bar','log','statusGrid','finishBtn'
           }
           class P(HTMLParser):
-              def __init__(self):
-                  super().__init__(); self.ids=set()
+              def __init__(self): super().__init__(); self.ids=set()
               def handle_starttag(self, tag, attrs):
                   d=dict(attrs)
                   if 'id' in d: self.ids.add(d['id'])
@@ -63,7 +71,8 @@ jobs:
           assert '/api/config' in html and '/api/install' in html and '/api/status' in html
           assert 'http://localhost:5678/rest/oauth2-credential/callback' in html
           assert 'Instalar e configurar automaticamente' in html
-          print('Visual installer HTML contract: OK')
+          assert '@media(max-width:900px)' in html
+          print('UTF-8 visual installer contract: OK')
 
       - name: Prepare CI environment
         run: |
@@ -80,7 +89,7 @@ jobs:
       - name: Validate Windows PowerShell scripts syntax
         shell: pwsh
         run: |
-          foreach ($path in @('scripts/bootstrap.ps1','scripts/setup-wizard.ps1')) {
+          foreach ($path in @('scripts/bootstrap.ps1','scripts/setup-wizard-v2.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile(
@@ -93,7 +102,7 @@ jobs:
             Write-Host "$path syntax: OK"
           }
 
-      - name: Validate guided setup contract
+      - name: Validate guided setup and explicit UTF-8 contract
         run: |
           grep -q "ValidateSet('Full','Prepare','Finalize','Start')" scripts/bootstrap.ps1
           grep -q 'showSetupOnFirstLoad' scripts/bootstrap.ps1
@@ -104,11 +113,12 @@ jobs:
           grep -q 'import:credentials' scripts/bootstrap.ps1
           grep -q 'import:workflow' scripts/bootstrap.ps1
           grep -q 'Ollama Local - Sistema Agentico' scripts/bootstrap.ps1
-          grep -q 'Gmail - Sistema Agentico' scripts/bootstrap.ps1
-          grep -q 'Google Calendar - Sistema Agentico' scripts/bootstrap.ps1
-          grep -q '/rest/owner/setup' scripts/setup-wizard.ps1
-          grep -q '/api/config' scripts/setup-wizard.ps1
-          grep -q '/api/install' scripts/setup-wizard.ps1
+          grep -q '/rest/owner/setup' scripts/setup-wizard-v2.ps1
+          grep -q '/api/config' scripts/setup-wizard-v2.ps1
+          grep -q '/api/install' scripts/setup-wizard-v2.ps1
+          grep -q 'ReadAllText' scripts/setup-wizard-v2.ps1
+          grep -q 'Text.Encoding]::UTF8' scripts/setup-wizard-v2.ps1
+          grep -q 'setup-wizard-v2.ps1' INSTALAR_WINDOWS.bat
           grep -q 'GOOGLE_CLIENT_ID' .env.example
           grep -q 'GOOGLE_CLIENT_SECRET' .env.example
           grep -q 'http://localhost:5678/rest/oauth2-credential/callback' .env.example
