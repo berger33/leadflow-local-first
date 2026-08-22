@@ -303,6 +303,8 @@ try {
     Write-Step 'Estado final dos servicos'
     & docker compose ps
 
+    $finalEnv = Get-EnvMap
+
     if (-not $NoOpen) {
         Start-Process 'http://127.0.0.1:5678'
         Start-Process 'http://127.0.0.1:3000/dashboard'
@@ -314,6 +316,12 @@ try {
     Write-Host '============================================================' -ForegroundColor Green
     Write-Host 'Validado: PostgreSQL, Ollama, modelo local, n8n, WAHA e workflow importado.'
     Write-Host 'Segredos internos foram gerados automaticamente quando necessario.'
+    Write-Host ''
+    Write-Host 'Acesso local ao WAHA:' -ForegroundColor Cyan
+    Write-Host '  URL:     http://127.0.0.1:3000/dashboard'
+    Write-Host ("  Usuario: " + $finalEnv['WAHA_DASHBOARD_USERNAME'])
+    Write-Host ("  Senha:   " + $finalEnv['WAHA_DASHBOARD_PASSWORD'])
+    Write-Host '  A senha aparece somente no seu terminal/.env local e nao e enviada ao GitHub.' -ForegroundColor DarkGray
     Write-Host ''
     Write-Host 'Restam apenas integracoes vinculadas a identidade/consentimento do usuario:' -ForegroundColor Yellow
     Write-Host '  1. No workflow, crie a conexao Ollama API com Base URL http://ollama:11434 e associe aos 2 nos de modelo.'
