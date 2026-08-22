@@ -1,81 +1,121 @@
-# Configuração de acessos — primeira execução
+# Configuração de acessos — assistente visual
 
-O projeto automatiza tudo o que pode ser configurado com segurança sem se passar pelo usuário. Contas externas continuam exigindo consentimento do proprietário.
+A experiência recomendada não exige editar `.env` nem criar manualmente a conexão Ollama no n8n.
 
-## O que é automático
-
-Ao executar `INICIAR_WINDOWS.bat`, o bootstrap:
-
-- cria `.env` se necessário;
-- gera senhas/chaves internas aleatórias;
-- inicia PostgreSQL e Ollama;
-- aguarda os serviços ficarem saudáveis;
-- verifica se os modelos definidos em `OLLAMA_MODEL` e `OLLAMA_VALIDATOR_MODEL` já existem;
-- baixa os modelos ausentes com até três tentativas;
-- inicia n8n e WAHA;
-- detecta se o n8n ainda precisa criar o primeiro proprietário local;
-- aguarda esse cadastro quando necessário;
-- importa o workflow principal sem duplicá-lo.
-
-## 1. Proprietário local do n8n
-
-Em uma instalação nova, o n8n exige a criação de um usuário proprietário local.
-
-O bootstrap detecta `showSetupOnFirstLoad`, abre automaticamente:
+Execute:
 
 ```text
-http://127.0.0.1:5678
+INSTALAR_WINDOWS.bat
 ```
 
-Preencha o formulário do n8n e volte ao terminal. Ao pressionar `ENTER`, o bootstrap confirma que o cadastro terminou e continua a importação.
-
-Esse acesso é local ao n8n e não é uma chave de API externa.
-
-## 2. Ollama
-
-O modelo é baixado automaticamente. A única configuração restante no editor do n8n é a conexão local exigida pelo próprio tipo de nó Ollama.
-
-Crie uma credencial **Ollama API** com:
+ou, na primeira execução:
 
 ```text
-Base URL: http://ollama:11434
-API Key: deixe vazio
+INICIAR_WINDOWS.bat
 ```
 
-Selecione-a em:
-
-- `Ollama · Modelo Executor`;
-- `Ollama · Modelo Validador`.
-
-Nenhuma chave paga é necessária para o Ollama local.
-
-## 3. Gmail OAuth2
-
-Gmail é uma conta externa. O n8n precisa que o próprio usuário autorize o acesso via OAuth2.
-
-Conecte uma credencial Gmail e atribua-a aos nós:
-
-- `ler_email`;
-- `resumir_email`;
-- `Solicitar aprovação · apagar_email`;
-- `Gmail · Apagar Email`;
-- `Solicitar aprovação · enviar_whatsapp`.
-
-Para os primeiros testes de exclusão, use mensagens sem importância ou uma conta de teste.
-
-## 4. Google Calendar OAuth2
-
-Conecte a conta Google Calendar e selecione-a no nó:
+O navegador abre o assistente local em:
 
 ```text
-criar_evento
+http://127.0.0.1:8765
 ```
 
-Primeiro teste recomendado: criar um evento descartável.
+## O que aparece na primeira tela
 
-## 5. WhatsApp / WAHA
+### Acesso local do n8n
 
-O bootstrap gera automaticamente a API key e senha local do WAHA no `.env`.
+Informe:
+
+- nome;
+- sobrenome;
+- e-mail de login;
+- senha local.
+
+A senha precisa ter de 8 a 64 caracteres, ao menos uma letra maiúscula e um número.
+
+O assistente utiliza a API local oficial de setup do n8n para criar o primeiro proprietário quando a instância ainda está nova.
+
+**A senha do proprietário não é gravada no `.env` nem em arquivo temporário.** Ela fica somente em memória no processo do assistente durante a instalação.
+
+### Human-in-the-loop
+
+Informe o endereço que receberá pedidos de aprovação antes de:
+
+- `apagar_email`;
+- `enviar_whatsapp`.
+
+Esse campo pode ser deixado vazio enquanto você testa somente caminhos não destrutivos.
+
+### Modelos locais
+
+Escolha o modelo do Agente Executor e do Agente QA.
+
+O bootstrap:
+
+1. inicia Ollama;
+2. verifica se o modelo já existe;
+3. baixa o modelo ausente com até três tentativas;
+4. valida com `ollama show`;
+5. cria automaticamente no n8n a credencial **Ollama Local - Sistema Agentico**;
+6. vincula a credencial aos dois nós de modelo durante a importação do workflow.
+
+Base URL interna:
+
+```text
+http://ollama:11434
+```
+
+Na instalação padrão do Ollama não é necessária API key.
+
+## Google OAuth2 — Gmail e Calendar
+
+A tela possui campos opcionais para:
+
+```text
+Google Client ID
+Google Client Secret
+```
+
+Para usar a configuração assistida:
+
+1. abra o Google Cloud Console;
+2. habilite **Gmail API** e **Google Calendar API**;
+3. crie um cliente OAuth 2.0 do tipo **Web application**;
+4. cadastre exatamente esta URI de redirecionamento:
+
+```text
+http://localhost:5678/rest/oauth2-credential/callback
+```
+
+5. copie Client ID e Client Secret para o assistente visual;
+6. inicie a instalação.
+
+Quando as duas chaves são informadas, o bootstrap prepara automaticamente:
+
+- credencial `Gmail - Sistema Agentico`;
+- credencial `Google Calendar - Sistema Agentico`;
+- referências das credenciais nos nós correspondentes do workflow.
+
+Depois da instalação, abra **Credentials** no n8n e conclua o botão de autorização/Sign in with Google.
+
+Esse último consentimento não é automatizado porque pertence à identidade da conta Google.
+
+### Se eu não quiser configurar Google agora?
+
+Deixe Client ID e Client Secret vazios.
+
+PostgreSQL, Ollama, n8n, WAHA e o workflow continuam sendo instalados. Gmail e Calendar podem ser conectados depois.
+
+## WhatsApp / WAHA
+
+O assistente gera automaticamente:
+
+- API key local do WAHA;
+- usuário do dashboard;
+- senha forte do dashboard;
+- configuração do webhook para o n8n.
+
+Na etapa **Conexões**, a interface mostra o usuário e a senha com botões de copiar/revelar.
 
 Abra:
 
@@ -83,36 +123,71 @@ Abra:
 http://127.0.0.1:3000/dashboard
 ```
 
-O pareamento do WhatsApp exige QR Code porque depende do aparelho/conta real do usuário.
+Depois inicie a sessão `default` e escaneie o QR Code com o WhatsApp que deseja conectar.
 
-1. abra/inicie a sessão `default`;
-2. escaneie o QR Code;
-3. aguarde a sessão ficar operacional;
-4. o webhook para o n8n já vem configurado pelo Compose.
+O QR Code é obrigatório porque representa autorização da conta real do usuário.
 
-## 6. E-mail de aprovação humana
+## Segredos internos
 
-Na primeira execução, se `APPROVAL_EMAIL` estiver vazio, o bootstrap pergunta qual endereço deverá receber os links de aprovação.
+O usuário não precisa inventar nem preencher:
 
-Você pode pressionar `ENTER` para configurar depois enquanto testa somente caminhos não destrutivos.
+- senha PostgreSQL;
+- `N8N_ENCRYPTION_KEY`;
+- `WAHA_API_KEY`;
+- senha do dashboard WAHA.
 
-## Por que OAuth e QR Code não são automatizados silenciosamente?
+Todos são gerados automaticamente e ficam apenas no `.env` local, que está no `.gitignore`.
 
-Porque Gmail, Calendar e WhatsApp representam identidade e autorização do próprio usuário. Guardar tokens, cookies ou sessões reais em um repositório público seria inseguro.
+## Arquivos temporários de configuração
 
-A automação termina exatamente na fronteira onde o consentimento humano precisa começar.
+Para importar credenciais e vincular o workflow, o bootstrap cria temporariamente:
 
-## Ordem segura de validação
+```text
+setup/credentials.runtime.json
+setup/workflow.runtime.json
+```
 
-1. configure a conexão Ollama;
-2. faça uma pergunta simples pelo Chat de Teste;
-3. conecte Gmail e teste `ler_email`;
-4. teste `resumir_email`;
-5. conecte Calendar e crie um evento descartável;
-6. solicite `apagar_email` e **rejeite**;
-7. pareie o WhatsApp e solicite um envio para seu próprio número, também rejeitando primeiro;
-8. confirme que nenhuma ação crítica ocorreu sem aprovação;
-9. valide os caminhos aprovados;
-10. só depois ative o webhook para uso cotidiano.
+Esses arquivos:
+
+- são ignorados pelo Git;
+- existem somente durante a finalização;
+- são removidos em bloco `finally`, inclusive quando ocorre falha.
+
+## Fluxo resumido
+
+```text
+Preencher uma tela
+      ↓
+Docker + segredos internos
+      ↓
+PostgreSQL + Ollama
+      ↓
+modelo local
+      ↓
+n8n + WAHA
+      ↓
+criar proprietário n8n
+      ↓
+criar credencial Ollama
+      ↓
+preparar Gmail/Calendar se chaves foram fornecidas
+      ↓
+importar workflow com referências
+      ↓
+usuário autoriza Google e escaneia QR do WhatsApp
+```
+
+## Ordem segura para validar o sistema
+
+1. faça login no n8n com o acesso escolhido no assistente;
+2. use o **Chat de Teste** com uma pergunta que não exige ferramenta externa;
+3. se configurou Google, conclua o OAuth;
+4. teste `ler_email`;
+5. teste `resumir_email`;
+6. crie um evento descartável no Calendar;
+7. solicite `apagar_email` e primeiro **rejeite** a aprovação;
+8. conecte WhatsApp e solicite envio para o próprio número, rejeitando primeiro;
+9. confirme que as ações críticas não aconteceram sem autorização;
+10. só depois valide caminhos aprovados e uso cotidiano.
 
 Consulte também [`QA_TEST_PLAN.md`](QA_TEST_PLAN.md).
