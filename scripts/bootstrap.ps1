@@ -9,7 +9,13 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+$RuntimeCredentialFile = Join-Path $ProjectRoot 'setup\credentials.runtime.json'
+$RuntimeWorkflowFile = Join-Path $ProjectRoot 'setup\workflow.runtime.json'
 Set-Location $ProjectRoot
+
+$OllamaCredentialId = '11111111-aaaa-4aaa-8aaa-111111111111'
+$GmailCredentialId = '22222222-bbbb-4bbb-8bbb-222222222222'
+$CalendarCredentialId = '33333333-cccc-4ccc-8ccc-333333333333'
 
 function Write-Step([string]$Message) { Write-Host "`n==> $Message" -ForegroundColor Cyan }
 function Write-Ok([string]$Message) { Write-Host "[OK] $Message" -ForegroundColor Green }
@@ -188,22 +194,100 @@ function Ensure-N8nOwnerInteractive {
     throw 'O cadastro inicial do n8n ainda nao foi concluido.'
 }
 
+function Add-CredentialReference($Node, [string]$CredentialType, [string]$CredentialId, [string]$CredentialName) {
+    $credentialMap = [ordered]@{}
+    $credentialMap[$CredentialType] = [ordered]@{ id = $CredentialId; name = $CredentialName }
+    $Node | Add-Member -NotePropertyName credentials -NotePropertyValue ([pscustomobject]$credentialMap) -Force
+}
+
+function Prepare-N8nRuntimeFiles {
+    Write-Step 'Preparando conexoes locais do n8n'
+    $envMap = Get-EnvMap
+    $googleClientId = if ($envMap.ContainsKey('GOOGLE_CLIENT_ID')) { $envMap['GOOGLE_CLIENT_ID'] } else { '' }
+    $googleClientSecret = if ($envMap.ContainsKey('GOOGLE_CLIENT_SECRET')) { $envMap['GOOGLE_CLIENT_SECRET'] } else { '' }
+    $hasGoogle = [bool]($googleClientId -and $googleClientSecret)
+
+    $credentials = @()
+    $credentials += [pscustomobject][ordered]@{
+        id = $OllamaCredentialId
+        name = 'Ollama Local - Sistema Agentico'
+        type = 'ollamaApi'
+        data = [ordered]@{ baseUrl = 'http://ollama:11434'; apiKey = '' }
+    }
+
+    if ($hasGoogle) {
+        $gmailScope = 'https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.addons.current.action.compose https://www.googleapis.com/auth/gmail.addons.current.message.action https://mail.google.com/ https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose'
+        $calendarScope = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events'
+        $common = [ordered]@{
+            grantType = 'authorizationCode'
+            authUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
+            accessTokenUrl = 'https://oauth2.googleapis.com/token'
+            clientId = $googleClientId
+            clientSecret = $googleClientSecret
+            authQueryParameters = 'access_type=offline&prompt=consent'
+            authentication = 'body'
+        }
+        $gmailData = [ordered]@{}
+        foreach ($k in $common.Keys) { $gmailData[$k] = $common[$k] }
+        $gmailData['customScopes'] = $false
+        $gmailData['scope'] = $gmailScope
+        $calendarData = [ordered]@{}
+        foreach ($k in $common.Keys) { $calendarData[$k] = $common[$k] }
+        $calendarData['customScopes'] = $false
+        $calendarData['scope'] = $calendarScope
+
+        $credentials += [pscustomobject][ordered]@{ id=$GmailCredentialId; name='Gmail - Sistema Agentico'; type='gmailOAuth2'; data=$gmailData }
+        $credentials += [pscustomobject][ordered]@{ id=$CalendarCredentialId; name='Google Calendar - Sistema Agentico'; type='googleCalendarOAuth2Api'; data=$calendarData }
+    }
+
+    $credentialsJson = ConvertTo-Json -InputObject @($credentials) -Depth 20
+    [IO.File]::WriteAllText($RuntimeCredentialFile, $credentialsJson, (New-Object Text.UTF8Encoding($false)))
+
+    $workflow = Get-Content 'n8n-agent-workflow.json' -Raw | ConvertFrom-Json
+    foreach ($node in $workflow.nodes) {
+        if ($node.name -in @('Ollama · Modelo Executor','Ollama · Modelo Validador')) {
+            Add-CredentialReference $node 'ollamaApi' $OllamaCredentialId 'Ollama Local - Sistema Agentico'
+        }
+        if ($hasGoogle -and $node.name -in @('ler_email','resumir_email','Solicitar aprovação · apagar_email','Gmail · Apagar Email','Solicitar aprovação · enviar_whatsapp')) {
+            Add-CredentialReference $node 'gmailOAuth2' $GmailCredentialId 'Gmail - Sistema Agentico'
+        }
+        if ($hasGoogle -and $node.name -eq 'criar_evento') {
+            Add-CredentialReference $node 'googleCalendarOAuth2Api' $CalendarCredentialId 'Google Calendar - Sistema Agentico'
+        }
+    }
+    $workflowJson = $workflow | ConvertTo-Json -Depth 100
+    [IO.File]::WriteAllText($RuntimeWorkflowFile, $workflowJson, (New-Object Text.UTF8Encoding($false)))
+
+    if ($hasGoogle) { Write-Ok 'Ollama, Gmail e Calendar preparados para importacao.' }
+    else { Write-Ok 'Ollama preparado automaticamente. Google sera conectado depois pelo usuario.' }
+    return $hasGoogle
+}
+
+function Import-LocalCredentials {
+    $hasGoogle = Prepare-N8nRuntimeFiles
+    $output = (& docker compose exec -T n8n n8n import:credentials --input=/files/setup/credentials.runtime.json 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host $output
+        if ($output -match 'Failed to find owner') { Write-Host '[STATE] N8N_OWNER_REQUIRED'; exit 20 }
+        throw 'Falha ao importar as conexoes locais do n8n.'
+    }
+    Write-Ok 'Credencial Ollama criada automaticamente no n8n.'
+    if ($hasGoogle) { Write-Ok 'Credenciais Google preparadas; falta apenas consentir via OAuth no navegador.' }
+}
+
 function Import-WorkflowIfNeeded {
     Write-Step 'Verificando workflow n8n'
     $workflowName = 'Sistema Agêntico n8n WhatsApp+Email'
     $listed = (& docker compose exec -T n8n n8n list:workflow 2>&1 | Out-String)
     if ($LASTEXITCODE -eq 0 -and $listed -like "*$workflowName*") {
-        Write-Ok 'Workflow principal ja existe; duplicacao evitada.'
+        Write-Warn 'Workflow principal ja existe; duplicacao evitada. Conexoes locais foram atualizadas separadamente.'
         return
     }
 
-    $importOutput = (& docker compose exec -T n8n n8n import:workflow --input=/files/n8n-agent-workflow.json 2>&1 | Out-String)
+    $importOutput = (& docker compose exec -T n8n n8n import:workflow --input=/files/setup/workflow.runtime.json 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0) {
         Write-Host $importOutput
-        if ($importOutput -match 'Failed to find owner') {
-            Write-Host '[STATE] N8N_OWNER_REQUIRED'
-            exit 20
-        }
+        if ($importOutput -match 'Failed to find owner') { Write-Host '[STATE] N8N_OWNER_REQUIRED'; exit 20 }
         throw 'A importacao automatica do workflow falhou.'
     }
 
@@ -212,6 +296,11 @@ function Import-WorkflowIfNeeded {
         throw 'O workflow nao apareceu na verificacao apos a importacao.'
     }
     Write-Ok 'Workflow principal importado e verificado.'
+}
+
+function Cleanup-RuntimeFiles {
+    Remove-Item $RuntimeCredentialFile -Force -ErrorAction SilentlyContinue
+    Remove-Item $RuntimeWorkflowFile -Force -ErrorAction SilentlyContinue
 }
 
 function Prepare-Core {
@@ -275,9 +364,14 @@ function Finalize-Core {
         if ($NonInteractive) { Write-Host '[STATE] N8N_OWNER_REQUIRED'; exit 20 }
         Ensure-N8nOwnerInteractive
     }
-    Import-WorkflowIfNeeded
-    [IO.File]::WriteAllText((Join-Path $ProjectRoot '.setup-complete'), (Get-Date).ToString('o'), (New-Object Text.UTF8Encoding($false)))
-    Write-Host '[STATE] SETUP_COMPLETE'
+    try {
+        Import-LocalCredentials
+        Import-WorkflowIfNeeded
+        [IO.File]::WriteAllText((Join-Path $ProjectRoot '.setup-complete'), (Get-Date).ToString('o'), (New-Object Text.UTF8Encoding($false)))
+        Write-Host '[STATE] SETUP_COMPLETE'
+    } finally {
+        Cleanup-RuntimeFiles
+    }
 }
 
 function Start-Existing {
@@ -315,9 +409,12 @@ try {
         'Full' {
             Prepare-Core
             Ensure-N8nOwnerInteractive
-            Import-WorkflowIfNeeded
-            [IO.File]::WriteAllText((Join-Path $ProjectRoot '.setup-complete'), (Get-Date).ToString('o'), (New-Object Text.UTF8Encoding($false)))
-            Write-Host '[STATE] SETUP_COMPLETE'
+            try {
+                Import-LocalCredentials
+                Import-WorkflowIfNeeded
+                [IO.File]::WriteAllText((Join-Path $ProjectRoot '.setup-complete'), (Get-Date).ToString('o'), (New-Object Text.UTF8Encoding($false)))
+                Write-Host '[STATE] SETUP_COMPLETE'
+            } finally { Cleanup-RuntimeFiles }
         }
     }
 
@@ -328,6 +425,7 @@ try {
     }
     exit 0
 } catch {
+    Cleanup-RuntimeFiles
     Write-Host ''
     Write-Host "[ERRO] $($_.Exception.Message)" -ForegroundColor Red
     if (Get-Command docker -ErrorAction SilentlyContinue) { & docker compose ps 2>$null }
