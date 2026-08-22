@@ -1,5 +1,58 @@
 # Changelog
 
+## 2.2.0 — 2026-08-22
+
+Release focada em **experiência de instalação e configuração para novos usuários**.
+
+### Instalador visual
+
+- novo `INSTALAR_WINDOWS.bat` como ponto de entrada recomendado;
+- nova interface local profissional em `setup/index.html`;
+- wizard servido somente em `127.0.0.1:8765`;
+- layout responsivo em quatro etapas: Preferências → Instalação → Conexões → Pronto;
+- status visual para Docker, PostgreSQL, Ollama, n8n, WAHA e workflow;
+- barra de progresso, mensagens de estado, toasts e painel de diagnóstico técnico;
+- `INICIAR_WINDOWS.bat` detecta automaticamente primeira execução e redireciona para o wizard.
+
+### Configuração em uma única tela
+
+- criação do proprietário local do n8n a partir de nome, sobrenome, e-mail e senha escolhidos no assistente;
+- senha do proprietário mantida somente em memória durante o setup;
+- escolha do modelo executor e do modelo validador;
+- configuração de fuso horário;
+- e-mail para aprovações Human-in-the-loop;
+- campos opcionais para Google OAuth Client ID e Client Secret;
+- URI de callback Google exibida e copiável na interface.
+
+### Automação de credenciais
+
+- credencial Ollama criada automaticamente no n8n;
+- credencial Ollama vinculada aos dois nós de modelo durante a importação;
+- quando Google Client ID/Secret são fornecidos, o bootstrap prepara credenciais Gmail e Google Calendar;
+- workflow é gerado temporariamente com referências explícitas às credenciais;
+- arquivos `credentials.runtime.json` e `workflow.runtime.json` são ignorados pelo Git e removidos após a finalização;
+- consentimento Google continua intencionalmente dependente do usuário;
+- usuário e senha WAHA são gerados automaticamente e exibidos somente no ambiente local.
+
+### Bootstrap
+
+- modos separados `Prepare`, `Finalize`, `Start` e `Full`;
+- caminhos de arquivos temporários compatíveis entre Windows PowerShell e PowerShell Core;
+- instalação retomável e idempotente;
+- `.setup-complete` diferencia primeira instalação de inicializações futuras;
+- health checks continuam bloqueando avanço quando n8n, WAHA, PostgreSQL ou Ollama não estão realmente disponíveis.
+
+### CI / QA
+
+- validação estrutural da UI de setup;
+- validação de sintaxe dos dois scripts PowerShell;
+- contrato de endpoints do wizard;
+- smoke test Docker com PostgreSQL, Ollama, n8n e WAHA;
+- `ollama pull` real de modelo pequeno;
+- criação de proprietário de teste pelo endpoint local do n8n;
+- execução da fase `Finalize` no CI;
+- verificação de importação do workflow e limpeza dos arquivos temporários.
+
 ## 2.1.0 — 2026-08-22
 
 Release focada em **confiabilidade da primeira execução no Windows**.
@@ -12,9 +65,8 @@ Release focada em **confiabilidade da primeira execução no Windows**.
 - definido nome de projeto Compose estável (`sistema-agentico`);
 - volumes receberam nomes estáveis para persistência previsível;
 - script de importação deixou de tentar iniciar uma stack quebrada de forma independente;
-- bootstrap agora detecta uma instalação nova do n8n antes de importar o workflow;
-- quando o primeiro proprietário local ainda não existe, o instalador abre a tela de cadastro, espera a conclusão e só então continua;
-- removida ambiguidade de passagem do argumento `-d` no Windows PowerShell 5.1/7 ao chamar Docker Compose.
+- bootstrap passou a detectar instalação nova do n8n antes da importação;
+- removida ambiguidade de passagem do argumento `-d` entre versões do PowerShell.
 
 ### Bootstrap inteligente
 
@@ -25,16 +77,14 @@ Release focada em **confiabilidade da primeira execução no Windows**.
 - health checks reais antes de avançar;
 - verificação do modelo Ollama antes do download;
 - até três tentativas de download do modelo;
-- detecção de `showSetupOnFirstLoad` do n8n;
 - importação idempotente do workflow para evitar duplicatas;
-- solicitação do e-mail de aprovação somente quando ainda não configurado;
 - diagnóstico final e mensagens de erro direcionadas.
 
 ### CI
 
 - validação de sintaxe do bootstrap PowerShell;
 - regressão que impede o retorno de `ollama-init` ao Compose;
-- smoke test Docker real de PostgreSQL, Ollama e n8n;
+- smoke test Docker real;
 - verificação da API/CLI do Ollama e `/healthz` do n8n.
 
 ## 2.0.0 — 2026-08-21
@@ -73,7 +123,6 @@ Evolução do **LeadFlow Local-First** para o **Sistema Agêntico n8n WhatsApp+E
 ### Experiência de entrega
 
 - novo `n8n-agent-workflow.json` importável;
-- `INICIAR_WINDOWS.bat` atualizado para subir o stack e importar o workflow;
 - diagnóstico Windows alinhado aos novos serviços;
 - demo pública refeita para Function Calling + Human-in-the-loop;
 - README reestruturado para portfólio de Automação, IA e QA.
