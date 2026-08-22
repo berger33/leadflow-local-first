@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.1.0 — 2026-08-22
+
+Release focada em **confiabilidade da primeira execução no Windows**.
+
+### Corrigido
+
+- removido o serviço temporário `ollama-init`, que podia deixar o Compose com dependência quebrada e gerar `No such container`;
+- n8n não depende mais da conclusão de um container descartável;
+- removidos `container_name` fixos para reduzir conflitos entre downloads/pastas diferentes;
+- definido nome de projeto Compose estável (`sistema-agentico`);
+- volumes receberam nomes estáveis para persistência previsível;
+- script de importação deixou de tentar iniciar uma stack quebrada de forma independente.
+
+### Bootstrap inteligente
+
+- novo `scripts/bootstrap.ps1`;
+- geração automática de segredos locais ausentes;
+- reparo de containers legados conhecidos sem apagar volumes;
+- inicialização em etapas: PostgreSQL/Ollama antes de n8n/WAHA;
+- health checks reais antes de avançar;
+- verificação do modelo Ollama antes do download;
+- até três tentativas de download do modelo;
+- importação idempotente do workflow para evitar duplicatas;
+- solicitação do e-mail de aprovação somente quando ainda não configurado;
+- diagnóstico final e mensagens de erro direcionadas.
+
+### CI
+
+- validação de sintaxe do bootstrap PowerShell;
+- regressão que impede o retorno de `ollama-init` ao Compose;
+- smoke test Docker real de PostgreSQL, Ollama e n8n;
+- verificação da API/CLI do Ollama e `/healthz` do n8n.
+
 ## 2.0.0 — 2026-08-21
 
 Evolução do **LeadFlow Local-First** para o **Sistema Agêntico n8n WhatsApp+Email**.
