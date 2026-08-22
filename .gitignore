@@ -1,4 +1,5 @@
 .env
+.setup-complete
 .DS_Store
 .vscode/
 .idea/
