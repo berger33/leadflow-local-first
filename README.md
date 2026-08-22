@@ -14,7 +14,7 @@
 
 **[▶ Abrir demo interativa](https://htmlpreview.github.io/?https://github.com/berger33/leadflow-local-first/blob/main/demo/index.html)** · **[⬇ Baixar projeto](https://github.com/berger33/leadflow-local-first/archive/refs/heads/main.zip)** · **[🧠 Ver workflow](n8n-agent-workflow.json)**
 
-A demo pública permite entender Function Calling, dual-agent, aprovação humana e audit trail sem conectar contas pessoais. A versão completa roda localmente.
+A demo pública apresenta Function Calling, dual-agent, aprovação humana e audit trail sem exigir contas pessoais. A versão completa roda localmente via Docker.
 
 ---
 
@@ -30,7 +30,7 @@ A experiência recomendada foi desenhada para que um novo usuário **não precis
 - aproximadamente 10 GB livres;
 - internet na primeira instalação.
 
-Você **não precisa instalar manualmente** Python, Node.js, PostgreSQL, n8n, Ollama ou WAHA.
+Não é necessário instalar manualmente Python, Node.js, PostgreSQL, n8n, Ollama ou WAHA.
 
 ## Primeira execução
 
@@ -43,15 +43,9 @@ Você **não precisa instalar manualmente** Python, Node.js, PostgreSQL, n8n, Ol
 INSTALAR_WINDOWS.bat
 ```
 
-ou simplesmente:
+Também é possível executar `INICIAR_WINDOWS.bat`: se ainda não existir uma instalação concluída, ele redireciona automaticamente para o assistente visual.
 
-```text
-INICIAR_WINDOWS.bat
-```
-
-Se a instalação ainda não estiver concluída, `INICIAR_WINDOWS.bat` detecta a primeira execução e abre automaticamente o assistente visual.
-
-## Uma única tela de configuração
+## Interface de instalação
 
 O navegador abre localmente em:
 
@@ -59,48 +53,81 @@ O navegador abre localmente em:
 http://127.0.0.1:8765
 ```
 
-Antes de instalar, o usuário informa em uma única tela:
+A interface oficial é servida por:
 
-### Acesso local do n8n
+```text
+setup/app.html
+scripts/setup-wizard-v2.ps1
+```
 
-- nome;
-- sobrenome;
-- e-mail de login;
-- senha local.
+O fluxo visual possui quatro etapas:
 
-A senha fica apenas em memória durante a instalação. Ela **não é escrita no `.env` nem em arquivo temporário**.
+```text
+Preferências
+    ↓
+Instalação
+    ↓
+Conexões
+    ↓
+Pronto
+```
 
-Quando o n8n sobe pela primeira vez, o assistente utiliza o endpoint local de setup da própria instância para criar o proprietário automaticamente.
+A interface foi revisada para uso em desktop e notebook, incluindo 1366×768, e possui:
 
-### Preferências do agente
+- grade responsiva sem sobreposição de campos;
+- painel lateral de progresso;
+- formulários com largura previsível;
+- campos de senha com mostrar/ocultar;
+- botões de copiar;
+- indicadores de saúde dos serviços;
+- barra de progresso;
+- console técnico para diagnóstico;
+- estados de sucesso e erro;
+- layout adaptativo para telas menores.
 
-- e-mail para aprovações Human-in-the-loop;
-- modelo Ollama do Agente Executor;
-- modelo Ollama do Agente QA;
-- fuso horário.
+### Compatibilidade UTF-8 no Windows
 
-### Google OAuth2 — opcional durante a instalação
+O servidor do instalador utiliza **leitura e escrita UTF-8 explícitas**. Isso evita o problema clássico do Windows PowerShell 5.1 em que textos UTF-8 sem BOM podem ser interpretados com a página de código ANSI e aparecer como:
 
-A mesma tela aceita:
+```text
+ConfiguraÃ§Ã£o
+PreferÃªncias
+ConexÃµes
+```
 
-- Google OAuth Client ID;
-- Google OAuth Client Secret.
+A versão atual lê `app.html` e `.env` explicitamente com `System.Text.Encoding.UTF8` e também responde ao navegador com `charset=utf-8`.
 
-Ela mostra a URI de redirecionamento que deve ser cadastrada no Google Cloud:
+---
+
+# O que o usuário informa
+
+Na primeira tela são solicitados somente dados que pertencem ao próprio usuário:
+
+- nome e sobrenome;
+- e-mail de login local do n8n;
+- senha local do n8n;
+- e-mail para aprovações Human-in-the-loop, opcional;
+- modelo Ollama principal;
+- modelo do Agente QA;
+- fuso horário;
+- Google OAuth Client ID, opcional;
+- Google OAuth Client Secret, opcional.
+
+A senha local do n8n é mantida apenas em memória durante a criação do proprietário e **não é persistida no `.env`**.
+
+A tela também informa a URI OAuth local:
 
 ```text
 http://localhost:5678/rest/oauth2-credential/callback
 ```
 
-Se Client ID e Client Secret forem fornecidos, o sistema prepara automaticamente as credenciais Gmail e Calendar e as referencia nos respectivos nós. Depois resta apenas o **consentimento OAuth no navegador**, que obrigatoriamente pertence ao usuário da conta Google.
-
 ---
 
-# O que acontece ao clicar em “Instalar e configurar automaticamente”
+# O que é automático
+
+Depois de clicar em **Instalar e configurar automaticamente**, o instalador executa:
 
 ```text
-valida o formulário
-      ↓
 verifica Docker
       ↓
 cria/repara .env
@@ -109,118 +136,59 @@ gera segredos internos aleatórios
       ↓
 valida Docker Compose
       ↓
-remove conflitos de versões antigas
+remove conflitos legados sem apagar volumes
       ↓
 inicia PostgreSQL + Ollama
       ↓
 executa health checks
       ↓
-verifica o modelo escolhido
+verifica o modelo local
       ↓
-baixa com retry se necessário
+baixa o modelo ausente com retry
       ↓
 inicia n8n + WAHA
       ↓
-executa novos health checks
-      ↓
-cria o proprietário local do n8n
+cria o primeiro proprietário local do n8n
       ↓
 cria a credencial Ollama
       ↓
-prepara Gmail/Calendar se informado
+prepara Gmail/Calendar se Google OAuth foi informado
       ↓
-gera uma cópia temporária do workflow com as referências
+gera o workflow com referências de credencial
       ↓
 importa e verifica o workflow
       ↓
-apaga os arquivos temporários
+remove arquivos temporários
       ↓
 marca a instalação como concluída
 ```
 
-Durante o processo, a interface exibe cards de status para Docker, PostgreSQL, Ollama, n8n, WAHA e workflow, barra de progresso e detalhes técnicos para diagnóstico.
-
----
-
-# Depois da instalação
-
-## Ollama
-
-A conexão é automática.
-
-O bootstrap cria no n8n a credencial:
-
-```text
-Ollama Local - Sistema Agentico
-```
-
-com:
-
-```text
-Base URL: http://ollama:11434
-```
-
-Ela é associada automaticamente aos dois modelos do workflow.
-
-A instalação local padrão não exige API key de IA.
-
-## Gmail + Google Calendar
-
-Se as chaves Google foram preenchidas no assistente, as credenciais já estarão preparadas e vinculadas.
-
-O usuário faz login no n8n com o acesso criado durante a instalação e conclui o consentimento Google em **Credentials**.
-
-Se preferir não fornecer Client ID/Secret na instalação, Gmail e Calendar podem ser configurados depois sem impedir a instalação do núcleo.
-
-## WhatsApp / WAHA
-
-O sistema gera automaticamente:
-
-- API key local;
-- usuário do dashboard;
-- senha forte aleatória;
-- webhook apontando para o n8n;
-- sessão padrão `default`.
-
-Na etapa **Conexões**, a interface exibe usuário e senha com ações de copiar/revelar.
-
-O único passo obrigatório é abrir o WAHA e **escanear o QR Code do próprio WhatsApp**, pois isso representa consentimento da conta real.
-
-## Próximas execuções
-
-Depois da instalação, é criado localmente:
+Depois da primeira instalação é criado localmente:
 
 ```text
 .setup-complete
 ```
 
-Nas próximas vezes:
-
-```text
-INICIAR_WINDOWS.bat
-```
-
-apenas inicia o stack existente e verifica os serviços. O wizard não reaparece desnecessariamente.
+Nas execuções seguintes, `INICIAR_WINDOWS.bat` apenas sobe o stack existente.
 
 ---
 
-# Automação x consentimento
+# Credenciais e consentimentos
 
-| Etapa | Tratamento |
-| --- | --- |
-| PostgreSQL | ✅ automático |
-| Chave de criptografia do n8n | ✅ automática |
-| API key e senha do WAHA | ✅ automáticas |
-| Ollama | ✅ automático |
-| Download/validação do modelo | ✅ automático |
-| Primeiro proprietário do n8n | ✅ criado pela UI com os dados escolhidos pelo usuário |
-| Credencial Ollama no n8n | ✅ automática |
-| Importação e verificação do workflow | ✅ automática |
-| Gmail/Calendar com Client ID/Secret fornecidos | ✅ credenciais preparadas automaticamente |
-| Consentimento Google OAuth | 👤 usuário autoriza no Google |
-| Pareamento WhatsApp | 👤 usuário escaneia o QR Code |
+| Componente | Configuração técnica | Ação do usuário |
+| --- | --- | --- |
+| PostgreSQL | automática | nenhuma |
+| Chave de criptografia n8n | automática | nenhuma |
+| Proprietário local n8n | criado pelo wizard | informar nome, e-mail e senha |
+| Ollama | automático | nenhuma API paga |
+| Download do modelo | automático | aguardar |
+| Credencial Ollama no n8n | automática | nenhuma |
+| WAHA API key | automática | nenhuma |
+| WAHA dashboard | usuário/senha gerados | usar para entrar |
+| Gmail/Calendar | preparados se Client ID/Secret forem informados | consentir OAuth no Google |
+| WhatsApp | infraestrutura automática | escanear QR Code |
 
-A filosofia é: **automatizar toda configuração técnica que pode ser reproduzida; preservar intervenção humana onde existe identidade, consentimento ou efeito externo.**
+A filosofia é: **automatizar configuração técnica; nunca automatizar consentimento de identidade**.
 
 ---
 
@@ -269,19 +237,19 @@ flowchart TD
 
 # Function Calling
 
-O arquivo [`n8n-agent-workflow.json`](n8n-agent-workflow.json) contém o workflow base exportável.
+O arquivo [`n8n-agent-workflow.json`](n8n-agent-workflow.json) contém o workflow principal.
 
 ## `ler_email(query, limit)`
 
-Leitura de mensagens do Gmail, sem alteração do conteúdo.
+Consulta mensagens do Gmail sem alterar conteúdo.
 
 ## `resumir_email(id)`
 
-Recupera um e-mail real pelo ID para que o agente produza um resumo estruturado.
+Recupera uma mensagem real pelo ID para produção de resumo estruturado.
 
 ## `apagar_email(id)`
 
-Ação destrutiva. Nunca executa imediatamente.
+Ferramenta destrutiva protegida por aprovação humana:
 
 ```text
 Tool Call
@@ -297,11 +265,11 @@ Wait
 
 ## `enviar_whatsapp(contato, msg)`
 
-Ação de efeito externo. Também exige aprovação humana antes do HTTP Request para WAHA.
+Ação de comunicação externa. Também exige aprovação humana antes do envio pelo WAHA.
 
 ## `criar_evento(data, titulo)`
 
-Cria evento no Google Calendar somente quando data/hora e título estão claros.
+Cria evento no Google Calendar quando data/hora e título estão claros.
 
 ---
 
@@ -309,119 +277,74 @@ Cria evento no Google Calendar somente quando data/hora e título estão claros.
 
 ## Agente Executor
 
-Responsável por:
-
-- compreender intenção;
-- decidir se precisa de ferramenta;
-- preencher parâmetros via Function Calling;
-- consumir resultados;
-- gerar resposta preliminar.
+Responsável por interpretar a intenção, selecionar ferramentas, preencher parâmetros via Function Calling, consumir resultados e produzir uma resposta preliminar.
 
 ## Agente QA Validador
 
-Não possui ferramentas destrutivas.
-
-Recebe:
-
-- pedido original;
-- resposta preliminar;
-- tool calls observáveis.
-
-E verifica:
+Não possui acesso às ferramentas destrutivas. Recebe pedido original, resposta preliminar e evidências observáveis da execução para verificar:
 
 - aderência ao pedido;
 - clareza;
-- consistência com resultados de ferramentas;
+- consistência com resultados das ferramentas;
 - ausência de sucesso inventado;
 - respeito ao Human-in-the-loop.
 
-A regra de projeto é: **quem executa não é o mesmo componente que valida**.
+A regra arquitetural é: **quem executa não é o mesmo componente que valida**.
 
 ---
 
 # Segurança e privacidade
 
-- portas administrativas vinculadas a `127.0.0.1`;
-- setup UI vinculada somente a `127.0.0.1:8765`;
+- interfaces administrativas vinculadas a `127.0.0.1`;
 - `.env` ignorado pelo Git;
-- senha do proprietário n8n mantida somente em memória durante o setup;
-- arquivos temporários de credenciais ignorados pelo Git e removidos após a importação;
+- senha do proprietário n8n mantida apenas em memória durante o setup;
+- arquivos temporários de credenciais ignorados e apagados após importação;
 - segredos internos gerados localmente;
 - tokens OAuth não são versionados;
 - sessão do WhatsApp permanece local;
-- ações sensíveis possuem `Wait` + aprovação humana;
-- audit trail registra input, ferramentas, parâmetros, resultados e output;
+- ações críticas possuem `Wait` + aprovação humana;
+- audit trail registra eventos, parâmetros, resultados e outputs observáveis;
 - raw chain-of-thought não é persistido;
-- cabeçalhos de segurança básicos são enviados pela UI local.
+- setup UI escuta somente em `127.0.0.1`;
+- conteúdo HTML é servido explicitamente em UTF-8.
 
-Consulte também [`SECURITY.md`](SECURITY.md) e [`docs/CREDENTIALS_SETUP.md`](docs/CREDENTIALS_SETUP.md).
+Consulte [`SECURITY.md`](SECURITY.md).
 
 ---
 
 # Qualidade e CI
 
-O GitHub Actions valida estaticamente:
+O GitHub Actions valida:
 
-- JSON do workflow;
-- dois agentes;
-- cinco tools;
+- JSON e contrato do workflow;
+- dois agentes e cinco tools;
 - dois gates Human-in-the-loop;
-- estrutura e IDs obrigatórios do instalador visual;
-- sintaxe de `bootstrap.ps1` e `setup-wizard.ps1`;
-- fases `Prepare`, `Finalize` e `Start`;
-- contratos de importação de credenciais/workflow;
+- HTML UTF-8 do instalador;
+- ausência de mojibake conhecido no arquivo-fonte;
+- IDs/endpoints necessários para a UI;
+- responsividade mínima do layout;
+- sintaxe do `bootstrap.ps1`;
+- sintaxe do `setup-wizard-v2.ps1`;
+- presença de leitura UTF-8 explícita;
+- configuração do launcher Windows;
 - Docker Compose;
-- bind local das portas;
+- binds locais das portas;
 - ausência do antigo `ollama-init`;
-- padrões comuns de vazamento de segredo.
+- padrões comuns de vazamento de segredos.
 
-O smoke test Docker sobe PostgreSQL, Ollama, n8n e WAHA e também executa:
-
-1. `ollama pull` real de um modelo pequeno;
-2. `ollama show`;
-3. validação do estado de primeira execução do n8n;
-4. criação de um proprietário de teste pelo endpoint local de setup;
-5. execução real da fase `Finalize` do bootstrap;
-6. importação de credencial Ollama;
-7. importação do workflow;
-8. verificação do workflow pelo CLI;
-9. confirmação de que arquivos temporários foram removidos.
-
-Assim o CI testa o mesmo caminho crítico usado pelo instalador, e não somente sintaxe de YAML/JSON.
+O smoke test Docker sobe PostgreSQL, Ollama, n8n e WAHA e executa um `ollama pull` real de um modelo pequeno antes de validar a finalização do workflow.
 
 ---
 
 # Diagnóstico
 
-Se algo falhar no Windows:
+Em caso de falha:
 
 ```text
 DIAGNOSTICO_WINDOWS.bat
 ```
 
 O script verifica Docker, Compose, containers, endpoints e logs dos serviços.
-
----
-
-# Execução manual
-
-Para quem prefere controlar tudo pelo terminal:
-
-```bash
-cp .env.example .env
-# edite somente o necessário
-
-docker compose config
-docker compose up -d
-```
-
-O bootstrap pode ser executado em fases:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -Mode Prepare
-powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -Mode Finalize
-powershell -ExecutionPolicy Bypass -File scripts/bootstrap.ps1 -Mode Start
-```
 
 ---
 
@@ -433,10 +356,10 @@ leadflow-local-first/
 ├── demo/
 │   └── index.html
 ├── setup/
-│   └── index.html
+│   └── app.html
 ├── scripts/
 │   ├── bootstrap.ps1
-│   └── setup-wizard.ps1
+│   └── setup-wizard-v2.ps1
 ├── .env.example
 ├── docker-compose.yml
 ├── n8n-agent-workflow.json
@@ -452,15 +375,15 @@ leadflow-local-first/
 
 # Tecnologias
 
-`n8n Advanced AI` · `Function Calling` · `Ollama` · `Qwen3` · `WAHA` · `WhatsApp` · `Gmail` · `Google Calendar` · `PostgreSQL` · `Docker Compose` · `PowerShell` · `Human-in-the-loop` · `GitHub Actions` · `QA` · `Audit Trail`
+`n8n Advanced AI` · `Function Calling` · `Ollama` · `Qwen3` · `WAHA` · `WhatsApp` · `Gmail` · `Google Calendar` · `PostgreSQL` · `Docker Compose` · `PowerShell` · `HTML5` · `CSS3` · `JavaScript` · `Human-in-the-loop` · `GitHub Actions` · `QA` · `Audit Trail`
 
 ---
 
 ## Status
 
-**Versão 2.2 — Guided Setup**
+**Versão 2.2.1 — Guided Setup / UTF-8 Windows Fix**
 
-O projeto possui instalação visual local em uma única tela, bootstrap autorreparável, criação assistida do proprietário n8n, LLM e credencial Ollama automáticas, preparação opcional de Gmail/Calendar e uma fronteira explícita entre automação técnica e consentimento de contas pessoais.
+A versão atual substitui o instalador visual anterior por uma única implementação oficial, com leitura UTF-8 explícita, layout revisado para desktop/notebook e CI dedicado a prevenir regressões de codificação no Windows.
 
 ## Autor
 
