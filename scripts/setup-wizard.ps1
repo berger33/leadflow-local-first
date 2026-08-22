@@ -6,8 +6,9 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$UiFile = Join-Path $ProjectRoot 'setup\index.html'
+$UiFile = Join-Path (Join-Path $ProjectRoot 'setup') 'index.html'
 $Bootstrap = Join-Path $PSScriptRoot 'bootstrap.ps1'
+$script:OwnerDraft = $null
 Set-Location $ProjectRoot
 
 function New-Secret([int]$Length = 64) {
@@ -29,9 +30,7 @@ function Ensure-EnvFile {
     foreach ($key in $replacements.Keys) {
         if ($raw.Contains($key)) { $raw = $raw.Replace($key, $replacements[$key]); $changed = $true }
     }
-    if ($changed) {
-        [IO.File]::WriteAllText((Resolve-Path '.env'), $raw, (New-Object Text.UTF8Encoding($false)))
-    }
+    if ($changed) { [IO.File]::WriteAllText((Resolve-Path '.env'), $raw, (New-Object Text.UTF8Encoding($false))) }
 }
 
 function Get-EnvMap {
@@ -51,11 +50,7 @@ function Set-EnvValue([string]$Key, [string]$Value) {
     $lines = @(Get-Content '.env')
     $found = $false
     for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match ('^' + [regex]::Escape($Key) + '=')) {
-            $lines[$i] = "$Key=$Value"
-            $found = $true
-            break
-        }
+        if ($lines[$i] -match ('^' + [regex]::Escape($Key) + '=')) { $lines[$i] = "$Key=$Value"; $found = $true; break }
     }
     if (-not $found) { $lines += "$Key=$Value" }
     [IO.File]::WriteAllLines((Resolve-Path '.env'), $lines, (New-Object Text.UTF8Encoding($false)))
@@ -88,9 +83,22 @@ function Test-Workflow {
 
 function Test-N8nNeedsOwner {
     try {
-        $settings = Invoke-RestMethod -Uri 'http://127.0.0.1:5678/rest/settings' -Method Get -TimeoutSec 3
+        $settings = Invoke-RestMethod -Uri 'http://localhost:5678/rest/settings' -Method Get -TimeoutSec 3
         return [bool]$settings.data.userManagement.showSetupOnFirstLoad
     } catch { return $false }
+}
+
+function Setup-N8nOwnerIfNeeded {
+    if (-not (Test-N8nNeedsOwner)) { return }
+    if ($null -eq $script:OwnerDraft) { throw 'Informe nome, e-mail e senha do acesso local n8n na primeira tela.' }
+    $payload = $script:OwnerDraft | ConvertTo-Json -Compress
+    try {
+        Invoke-RestMethod -Uri 'http://localhost:5678/rest/owner/setup' -Method Post -ContentType 'application/json' -Body $payload -TimeoutSec 20 | Out-Null
+    } catch {
+        throw "Nao foi possivel criar o proprietario local do n8n: $($_.Exception.Message)"
+    }
+    Start-Sleep -Seconds 1
+    if (Test-N8nNeedsOwner) { throw 'O n8n ainda informa que o proprietario inicial nao foi configurado.' }
 }
 
 function Get-StatusObject {
@@ -123,7 +131,7 @@ function Write-Response($Response, [int]$StatusCode, [string]$ContentType, [stri
     $Response.ContentEncoding = [Text.Encoding]::UTF8
     $Response.Headers['Cache-Control'] = 'no-store'
     $Response.Headers['X-Content-Type-Options'] = 'nosniff'
-    $Response.Headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
+    $Response.Headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline' https://console.cloud.google.com; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
     $Response.ContentLength64 = $bytes.Length
     $Response.OutputStream.Write($bytes, 0, $bytes.Length)
     $Response.OutputStream.Close()
@@ -135,30 +143,23 @@ function Write-Json($Response, [int]$StatusCode, $Object) {
 
 function Invoke-Bootstrap([string]$Mode) {
     $output = (& powershell -NoProfile -ExecutionPolicy Bypass -File $Bootstrap -Mode $Mode -NoOpen -NonInteractive 2>&1 | Out-String)
-    $code = $LASTEXITCODE
-    return [ordered]@{ code = $code; log = $output }
+    return [ordered]@{ code = $LASTEXITCODE; log = $output }
 }
 
-function Validate-Model([string]$Value) {
-    return ($Value -match '^[A-Za-z0-9._:/-]{1,80}$')
+function Validate-Model([string]$Value) { return ($Value -match '^[A-Za-z0-9._:/-]{1,80}$') }
+function Validate-OwnerPassword([string]$Value) {
+    return ($Value.Length -ge 8 -and $Value.Length -le 64 -and $Value -match '[A-Z]' -and $Value -match '\d')
 }
 
-if (-not (Test-Path $UiFile)) {
-    Write-Host '[ERRO] setup/index.html nao foi encontrado.' -ForegroundColor Red
-    exit 1
-}
-
+if (-not (Test-Path $UiFile)) { Write-Host '[ERRO] setup/index.html nao foi encontrado.' -ForegroundColor Red; exit 1 }
 Ensure-EnvFile
 
 $prefix = "http://127.0.0.1:$Port/"
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add($prefix)
-try {
-    $listener.Start()
-} catch {
+try { $listener.Start() } catch {
     Write-Host "[ERRO] Nao foi possivel abrir o assistente em $prefix" -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Yellow
-    Write-Host 'Feche outro programa que esteja usando a porta ou execute o instalador novamente.'
     exit 1
 }
 
@@ -172,25 +173,15 @@ Start-Process $prefix
 $script:Running = $true
 try {
     while ($script:Running -and $listener.IsListening) {
-        $context = $listener.GetContext()
-        $request = $context.Request
-        $response = $context.Response
+        $context = $listener.GetContext(); $request = $context.Request; $response = $context.Response
         $path = $request.Url.AbsolutePath.ToLowerInvariant()
         try {
-            if ($request.HttpMethod -eq 'GET' -and ($path -eq '/' -or $path -eq '/index.html')) {
-                Write-Response $response 200 'text/html; charset=utf-8' (Get-Content $UiFile -Raw)
-                continue
-            }
-
-            if ($request.HttpMethod -eq 'GET' -and $path -eq '/api/status') {
-                Write-Json $response 200 (Get-StatusObject)
-                continue
-            }
+            if ($request.HttpMethod -eq 'GET' -and ($path -eq '/' -or $path -eq '/index.html')) { Write-Response $response 200 'text/html; charset=utf-8' (Get-Content $UiFile -Raw); continue }
+            if ($request.HttpMethod -eq 'GET' -and $path -eq '/api/status') { Write-Json $response 200 (Get-StatusObject); continue }
 
             if ($request.HttpMethod -eq 'GET' -and $path -eq '/api/config') {
-                Ensure-EnvFile
-                $envMap = Get-EnvMap
-                $obj = [ordered]@{
+                Ensure-EnvFile; $envMap = Get-EnvMap
+                Write-Json $response 200 ([ordered]@{
                     approvalEmail = if ($envMap.ContainsKey('APPROVAL_EMAIL')) { $envMap['APPROVAL_EMAIL'] } else { '' }
                     model = if ($envMap.ContainsKey('OLLAMA_MODEL')) { $envMap['OLLAMA_MODEL'] } else { 'qwen3:4b' }
                     validatorModel = if ($envMap.ContainsKey('OLLAMA_VALIDATOR_MODEL')) { $envMap['OLLAMA_VALIDATOR_MODEL'] } else { 'qwen3:4b' }
@@ -200,62 +191,53 @@ try {
                     googleCallback = 'http://localhost:5678/rest/oauth2-credential/callback'
                     wahaUser = if ($envMap.ContainsKey('WAHA_DASHBOARD_USERNAME')) { $envMap['WAHA_DASHBOARD_USERNAME'] } else { 'admin' }
                     wahaPassword = if ($envMap.ContainsKey('WAHA_DASHBOARD_PASSWORD')) { $envMap['WAHA_DASHBOARD_PASSWORD'] } else { '' }
-                }
-                Write-Json $response 200 $obj
-                continue
+                }); continue
             }
 
             if ($request.HttpMethod -eq 'POST' -and $path -eq '/api/config') {
-                $raw = Read-RequestBody $request
-                $data = $raw | ConvertFrom-Json
-                $email = [string]$data.approvalEmail
-                $model = [string]$data.model
-                $validator = [string]$data.validatorModel
-                $timezone = [string]$data.timezone
+                $data = (Read-RequestBody $request) | ConvertFrom-Json
+                $email = [string]$data.approvalEmail; $model = [string]$data.model; $validator = [string]$data.validatorModel; $timezone = [string]$data.timezone
                 $googleClientId = if ($data.PSObject.Properties.Name -contains 'googleClientId') { [string]$data.googleClientId } else { '' }
                 $googleClientSecret = if ($data.PSObject.Properties.Name -contains 'googleClientSecret') { [string]$data.googleClientSecret } else { '' }
+                $ownerFirstName = if ($data.PSObject.Properties.Name -contains 'ownerFirstName') { [string]$data.ownerFirstName } else { '' }
+                $ownerLastName = if ($data.PSObject.Properties.Name -contains 'ownerLastName') { [string]$data.ownerLastName } else { '' }
+                $ownerEmail = if ($data.PSObject.Properties.Name -contains 'ownerEmail') { [string]$data.ownerEmail } else { '' }
+                $ownerPassword = if ($data.PSObject.Properties.Name -contains 'ownerPassword') { [string]$data.ownerPassword } else { '' }
 
-                if ($email -and $email -notmatch '^[^\s@]+@[^\s@]+\.[^\s@]+$') { throw 'Informe um e-mail de aprovacao valido ou deixe o campo vazio.' }
+                if ($email -and $email -notmatch '^[^\s@]+@[^\s@]+\.[^\s@]+$') { throw 'Informe um e-mail de aprovacao valido ou deixe vazio.' }
                 if (-not (Validate-Model $model) -or -not (Validate-Model $validator)) { throw 'Nome de modelo Ollama invalido.' }
                 if ($timezone -notmatch '^[A-Za-z_]+/[A-Za-z_]+$' -and $timezone -ne 'UTC') { throw 'Fuso horario invalido.' }
-                if (($googleClientId -and -not $googleClientSecret) -or ($googleClientSecret -and -not $googleClientId)) { throw 'Para preparar Google automaticamente, informe Client ID e Client Secret juntos.' }
-                if ($googleClientId -and $googleClientId.Length -gt 512) { throw 'Google Client ID invalido.' }
-                if ($googleClientSecret -and $googleClientSecret.Length -gt 512) { throw 'Google Client Secret invalido.' }
+                if (($googleClientId -and -not $googleClientSecret) -or ($googleClientSecret -and -not $googleClientId)) { throw 'Informe Google Client ID e Client Secret juntos.' }
+                if ($googleClientId.Length -gt 512 -or $googleClientSecret.Length -gt 512) { throw 'Credencial Google excede o tamanho esperado.' }
+
+                $ownerValues = @($ownerFirstName,$ownerLastName,$ownerEmail,$ownerPassword)
+                if (($ownerValues | Where-Object { $_ }).Count -gt 0) {
+                    if (-not $ownerFirstName -or -not $ownerLastName) { throw 'Informe nome e sobrenome para o acesso local do n8n.' }
+                    if ($ownerEmail -notmatch '^[^\s@]+@[^\s@]+\.[^\s@]+$') { throw 'Informe um e-mail valido para o acesso local do n8n.' }
+                    if (-not (Validate-OwnerPassword $ownerPassword)) { throw 'A senha do n8n deve ter 8 a 64 caracteres, ao menos 1 letra maiuscula e 1 numero.' }
+                    $script:OwnerDraft = [ordered]@{ email=$ownerEmail; firstName=$ownerFirstName; lastName=$ownerLastName; password=$ownerPassword }
+                }
 
                 Ensure-EnvFile
-                Set-EnvValue 'APPROVAL_EMAIL' $email
-                Set-EnvValue 'OLLAMA_MODEL' $model
-                Set-EnvValue 'OLLAMA_VALIDATOR_MODEL' $validator
-                Set-EnvValue 'GENERIC_TIMEZONE' $timezone
-                Set-EnvValue 'GOOGLE_CLIENT_ID' $googleClientId
-                Set-EnvValue 'GOOGLE_CLIENT_SECRET' $googleClientSecret
-                Write-Json $response 200 ([ordered]@{ ok = $true; googleConfigured = [bool]($googleClientId -and $googleClientSecret) })
-                continue
+                Set-EnvValue 'APPROVAL_EMAIL' $email; Set-EnvValue 'OLLAMA_MODEL' $model; Set-EnvValue 'OLLAMA_VALIDATOR_MODEL' $validator
+                Set-EnvValue 'GENERIC_TIMEZONE' $timezone; Set-EnvValue 'GOOGLE_CLIENT_ID' $googleClientId; Set-EnvValue 'GOOGLE_CLIENT_SECRET' $googleClientSecret
+                Write-Json $response 200 ([ordered]@{ ok=$true; googleConfigured=[bool]($googleClientId -and $googleClientSecret); ownerDraftReady=($null -ne $script:OwnerDraft) }); continue
             }
 
             if ($request.HttpMethod -eq 'POST' -and $path -eq '/api/install') {
-                $result = Invoke-Bootstrap 'Prepare'
-                if ($result.code -ne 0) {
-                    Write-Json $response 500 ([ordered]@{ error = 'A preparacao automatica falhou. Veja os detalhes tecnicos.'; log = $result.log; code = $result.code })
-                } else {
-                    Write-Json $response 200 ([ordered]@{ ok = $true; log = $result.log; status = (Get-StatusObject) })
-                }
-                continue
+                $prepare = Invoke-Bootstrap 'Prepare'
+                if ($prepare.code -ne 0) { Write-Json $response 500 ([ordered]@{ error='A preparacao automatica falhou.'; log=$prepare.log; code=$prepare.code }); continue }
+                Setup-N8nOwnerIfNeeded
+                $final = Invoke-Bootstrap 'Finalize'
+                if ($final.code -ne 0) { Write-Json $response 500 ([ordered]@{ error='A finalizacao automatica falhou.'; log=($prepare.log + "`n" + $final.log); code=$final.code }); continue }
+                Write-Json $response 200 ([ordered]@{ ok=$true; log=($prepare.log + "`n" + $final.log); status=(Get-StatusObject) }); continue
             }
 
             if ($request.HttpMethod -eq 'POST' -and $path -eq '/api/finalize') {
-                if (Test-N8nNeedsOwner) {
-                    Write-Json $response 200 ([ordered]@{ ok = $false; needsOwner = $true })
-                    continue
-                }
+                Setup-N8nOwnerIfNeeded
                 $result = Invoke-Bootstrap 'Finalize'
-                if ($result.code -eq 20) {
-                    Write-Json $response 200 ([ordered]@{ ok = $false; needsOwner = $true; log = $result.log })
-                } elseif ($result.code -ne 0) {
-                    Write-Json $response 500 ([ordered]@{ error = 'A finalizacao automatica falhou.'; log = $result.log; code = $result.code })
-                } else {
-                    Write-Json $response 200 ([ordered]@{ ok = $true; needsOwner = $false; log = $result.log; status = (Get-StatusObject) })
-                }
+                if ($result.code -ne 0) { Write-Json $response 500 ([ordered]@{ error='A finalizacao automatica falhou.'; log=$result.log; code=$result.code }) }
+                else { Write-Json $response 200 ([ordered]@{ ok=$true; needsOwner=$false; log=$result.log; status=(Get-StatusObject) }) }
                 continue
             }
 
@@ -266,22 +248,15 @@ try {
                 continue
             }
 
-            if ($request.HttpMethod -eq 'POST' -and $path -eq '/api/shutdown') {
-                Write-Json $response 200 ([ordered]@{ ok = $true })
-                $script:Running = $false
-                continue
-            }
-
-            Write-Json $response 404 ([ordered]@{ error = 'Rota nao encontrada.' })
+            if ($request.HttpMethod -eq 'POST' -and $path -eq '/api/shutdown') { Write-Json $response 200 ([ordered]@{ ok=$true }); $script:OwnerDraft=$null; $script:Running=$false; continue }
+            Write-Json $response 404 ([ordered]@{ error='Rota nao encontrada.' })
         } catch {
-            if ($response.OutputStream.CanWrite) {
-                Write-Json $response 500 ([ordered]@{ error = $_.Exception.Message })
-            }
+            if ($response.OutputStream.CanWrite) { Write-Json $response 500 ([ordered]@{ error=$_.Exception.Message }) }
         }
     }
 } finally {
+    $script:OwnerDraft = $null
     if ($listener.IsListening) { $listener.Stop() }
     $listener.Close()
 }
-
 exit 0
