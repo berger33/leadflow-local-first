@@ -1,43 +1,162 @@
 # Sistema Agêntico n8n WhatsApp+Email
 
-**Automação agêntica local-first com n8n, LLM local, Function Calling, Gmail, Google Calendar, WhatsApp e Human-in-the-loop para ações de risco.**
+**Automação agêntica local-first com n8n, LLM local, Function Calling, Gmail, Google Calendar, WhatsApp, Human-in-the-loop e um segundo agente de QA.**
 
-> Evolução do projeto **LeadFlow Local-First** para um ecossistema centrado no **Advanced AI do n8n** e em práticas de **Engenharia de Automação, QA, observabilidade e segurança operacional**.
+[![CI](https://github.com/berger33/leadflow-local-first/actions/workflows/ci.yml/badge.svg)](https://github.com/berger33/leadflow-local-first/actions/workflows/ci.yml)
+
+> Evolução do projeto **LeadFlow Local-First** para um ecossistema centrado no Advanced AI do n8n, automação segura e qualidade de software.
 
 <p align="center">
-  <strong>🤖 Agente Executor</strong> · <strong>🧪 Agente QA Validador</strong> · <strong>🛡️ Aprovação Humana</strong> · <strong>📧 Gmail</strong> · <strong>💬 WhatsApp</strong> · <strong>📅 Calendar</strong>
+  <strong>🤖 Agente Executor</strong> · <strong>🧪 Agente QA</strong> · <strong>🛡️ Aprovação Humana</strong> · <strong>📧 Gmail</strong> · <strong>💬 WhatsApp</strong> · <strong>📅 Calendar</strong>
 </p>
 
 ## Acesso rápido
 
 **[▶ Abrir demo interativa](https://htmlpreview.github.io/?https://github.com/berger33/leadflow-local-first/blob/main/demo/index.html)** · **[⬇ Baixar projeto completo](https://github.com/berger33/leadflow-local-first/archive/refs/heads/main.zip)** · **[🧠 Ver workflow n8n](n8n-agent-workflow.json)**
 
-A demo permite que recrutadores explorem o fluxo de decisão, Function Calling, aprovação humana e rastreabilidade **sem conectar contas pessoais**. A execução real usa o stack Docker deste repositório.
+A demo permite explorar Function Calling, dual-agent, aprovação humana e audit trail sem conectar contas pessoais. A execução real roda localmente via Docker.
 
 ---
 
-## Visão do projeto
+# Instalação no Windows — recomendada
 
-O sistema transforma o n8n em uma camada de **orquestração agêntica**. O usuário envia uma intenção por chat de teste ou WhatsApp. Um agente com LLM local decide se precisa utilizar uma ferramenta e chama funções com parâmetros estruturados. Um segundo agente atua como **quality gate**, revisando a resposta final antes da devolução ao usuário.
+## Requisitos mínimos
 
-Ações com impacto externo ou destrutivo não são executadas autonomamente: `apagar_email(id)` e `enviar_whatsapp(contato, msg)` entram em um fluxo explícito de **Human-in-the-loop** que envia um pedido de aprovação e pausa a execução em um nó **Wait**.
+- Windows 10/11 64-bit;
+- Docker Desktop com Docker Compose v2;
+- 8 GB de RAM no mínimo; 16 GB recomendado;
+- cerca de 10 GB livres para imagens, volumes e modelo local;
+- internet na primeira instalação.
 
-### Casos de uso
+Você **não precisa instalar manualmente** Python, Node.js, n8n, PostgreSQL, Ollama ou WAHA.
+
+## Primeira execução
+
+1. Baixe o ZIP do projeto.
+2. Extraia a pasta.
+3. Abra o Docker Desktop e aguarde o Engine ficar pronto.
+4. Dê duplo clique em:
+
+```text
+INICIAR_WINDOWS.bat
+```
+
+O instalador chama `scripts/bootstrap.ps1`, que executa automaticamente:
+
+```text
+Docker disponível?
+      ↓
+cria/repara .env
+      ↓
+gera senhas e chaves locais aleatórias
+      ↓
+valida docker-compose.yml
+      ↓
+remove containers legados que possam conflitar
+      ↓
+inicia PostgreSQL + Ollama
+      ↓
+health checks reais
+      ↓
+modelo já existe?
+   ├── sim → continua
+   └── não → download com até 3 tentativas
+      ↓
+inicia n8n + WAHA
+      ↓
+aguarda n8n responder
+      ↓
+workflow já existe?
+   ├── sim → não duplica
+   └── não → importa automaticamente
+      ↓
+abre n8n + WAHA
+```
+
+### O que o instalador pergunta
+
+Senhas internas de banco, WAHA e chave de criptografia do n8n são **geradas automaticamente** e salvas apenas no `.env` local.
+
+Para o Human-in-the-loop, o bootstrap solicita:
+
+```text
+E-mail que receberá pedidos de aprovação
+```
+
+Você pode pressionar `ENTER` e configurar depois se ainda estiver testando apenas ações não destrutivas.
+
+### O que não pode ser automatizado sem sua autorização
+
+Algumas etapas dependem da identidade do próprio usuário e, por segurança, não são incluídas no GitHub:
+
+1. criar o administrador local do n8n na primeira abertura;
+2. criar no n8n a credencial Ollama apontando para `http://ollama:11434` e atribuí-la aos dois modelos;
+3. autorizar Gmail e Google Calendar via OAuth2;
+4. escanear o QR Code do WhatsApp no WAHA.
+
+Essas etapas não são “falhas do instalador”: OAuth e QR Code são consentimentos vinculados às contas reais de quem está executando o projeto.
+
+---
+
+# Correção do erro `ollama-init`
+
+Versões anteriores utilizavam um container temporário chamado `ollama-init` e faziam o n8n depender da conclusão desse container.
+
+Em algumas instalações do Docker Desktop, uma falha ou recriação desse serviço podia produzir mensagens como:
+
+```text
+service "ollama-init" didn't complete successfully
+No such container
+service "n8n" is not running
+```
+
+A arquitetura atual **não utiliza mais `ollama-init`**.
+
+Agora:
+
+- Ollama é um serviço permanente;
+- o bootstrap aguarda a API real responder;
+- verifica se o modelo já existe;
+- baixa o modelo diretamente no container permanente;
+- repete o download em caso de falha transitória;
+- n8n não depende de um container descartável;
+- containers legados conhecidos são removidos automaticamente sem apagar os volumes persistentes.
+
+Se você veio de uma versão anterior, basta baixar a versão atual e executar novamente `INICIAR_WINDOWS.bat`.
+
+Para diagnóstico detalhado:
+
+```text
+DIAGNOSTICO_WINDOWS.bat
+```
+
+Ele mostra containers, possíveis conflitos legados, health checks, modelos Ollama e logs de PostgreSQL, Ollama, n8n e WAHA.
+
+---
+
+# Visão do projeto
+
+O sistema transforma o n8n em uma camada de **orquestração agêntica**. O usuário envia uma intenção por chat de teste ou WhatsApp. Um agente com LLM local decide se precisa utilizar uma ferramenta e realiza Function Calling com parâmetros estruturados.
+
+Um segundo agente atua como **quality gate** e revisa a resposta antes da devolução ao usuário.
+
+Ações com impacto externo ou destrutivo não são executadas autonomamente: `apagar_email(id)` e `enviar_whatsapp(contato, msg)` entram obrigatoriamente em Human-in-the-loop.
+
+### Exemplos
 
 - “Liste meus cinco e-mails não lidos mais recentes.”
 - “Resuma o e-mail com ID `18f...` e destaque prazos.”
 - “Apague o e-mail `18f...`.” → **aguarda aprovação humana**.
 - “Envie no WhatsApp para João: reunião confirmada às 15h.” → **aguarda aprovação humana**.
 - “Crie um evento amanhã às 14h chamado Revisão de Sprint.”
-- Interagir pelo WhatsApp e receber a resposta validada pelo segundo agente.
 
 ---
 
-# Arquitetura agêntica
+# Arquitetura
 
 ```mermaid
 flowchart TD
-    U[Usuário] -->|Chat de teste| CT[Chat Trigger n8n]
+    U[Usuário] -->|Chat| CT[Chat Trigger]
     U -->|WhatsApp| WA[WAHA Webhook]
     CT --> IN[Normalização + Audit Input]
     WA --> IN
@@ -55,52 +174,43 @@ flowchart TD
     T2 --> Gmail
     T5 --> Cal[(Google Calendar)]
 
-    T3 --> AP1[Solicitar aprovação por e-mail]
+    T3 --> AP1[Aprovação]
     AP1 --> W1[Wait]
     W1 -->|Aprovado| Gmail
-    W1 -->|Rejeitado| RJ1[Ação cancelada]
+    W1 -->|Rejeitado| RJ1[Cancelar]
 
-    T4 --> AP2[Solicitar aprovação por e-mail]
+    T4 --> AP2[Aprovação]
     AP2 --> W2[Wait]
     W2 -->|Aprovado| WAPI[WAHA / WhatsApp]
-    W2 -->|Rejeitado| RJ2[Ação cancelada]
+    W2 -->|Rejeitado| RJ2[Cancelar]
 
-    A1 --> AUD[Audit · Decisão do Agente]
+    A1 --> AUD[Audit · decisão]
     AUD --> A2[Agente QA Validador]
     O2[Ollama local] --> A2
-    A2 --> OUT[Audit · Output]
+    A2 --> OUT[Audit · output]
     OUT --> RESP[Resposta final]
 
-    PG[(PostgreSQL)] --- N8N[n8n Execution History]
+    PG[(PostgreSQL)] --- N8N[n8n / histórico]
 ```
-
-### Infraestrutura
 
 | Componente | Responsabilidade | Porta local |
 | --- | --- | ---: |
-| **n8n** | Orquestração, Advanced AI, tools, HITL e histórico de execução | `5678` |
-| **Ollama** | LLM local do executor e do validador | `11434` |
-| **WAHA** | Bridge local para WhatsApp Web | `3000` |
-| **PostgreSQL** | Banco persistente utilizado pelo n8n para estado e histórico | interna |
+| **n8n** | Advanced AI, tools, HITL, workflows e histórico | `5678` |
+| **Ollama** | LLM local do executor e validador | `11434` |
+| **WAHA** | integração com WhatsApp Web | `3000` |
+| **PostgreSQL** | persistência do n8n e execuções | interna |
 
-As portas expostas são vinculadas a `127.0.0.1`, reduzindo exposição acidental na rede local.
+As portas administrativas expostas são vinculadas a `127.0.0.1`.
 
 ---
 
-# Function Calling e ferramentas
+# Function Calling
 
-O arquivo [`n8n-agent-workflow.json`](n8n-agent-workflow.json) contém o workflow exportável do n8n. O **Agente Orquestrador** recebe descrições em linguagem natural para cada ferramenta e decide quando utilizá-las.
+O arquivo [`n8n-agent-workflow.json`](n8n-agent-workflow.json) contém o workflow importável.
 
 ## `ler_email(query, limit)`
 
-**Tipo:** leitura / baixo risco.
-
-Consulta o Gmail sem modificar mensagens. O agente informa:
-
-- `query`: filtro compatível com a busca do Gmail;
-- `limit`: quantidade máxima de mensagens.
-
-Exemplo:
+Consulta mensagens do Gmail sem modificá-las. É uma tool de leitura e baixo risco.
 
 ```text
 Usuário: mostre meus 5 e-mails não lidos de hoje
@@ -109,209 +219,113 @@ Agente → ler_email(query="is:unread newer_than:1d", limit=5)
 
 ## `resumir_email(id)`
 
-**Tipo:** leitura / baixo risco.
-
-Recupera uma mensagem pelo ID real. O resultado retorna ao Agente Orquestrador, que produz um resumo preservando informações relevantes como remetente, assunto, datas, valores, prazos e ações solicitadas.
+Recupera uma mensagem pelo ID real e fornece contexto ao agente para produzir um resumo com remetente, assunto, datas, valores, prazos e ações solicitadas.
 
 ## `apagar_email(id)`
 
-**Tipo:** destrutiva / alto risco.
-
-A ferramenta não apaga imediatamente. Ela chama o próprio workflow como subworkflow e executa:
+Ação destrutiva. Não apaga imediatamente:
 
 ```text
 Tool Call
   ↓
-Audit · pedido pendente
+Audit
   ↓
 E-mail de aprovação
   ↓
 WAIT
-  ├── aprovado → Gmail Delete → resultado executado
-  └── rejeitado → resultado cancelado
+  ├── aprovado → Gmail Delete
+  └── rejeitado → ação cancelada
 ```
-
-O agente nunca recebe autorização para contornar o `Wait`.
 
 ## `enviar_whatsapp(contato, msg)`
 
-**Tipo:** efeito externo / alto risco.
-
-O agente precisa fornecer destino e mensagem final. Antes do envio real, o fluxo envia um pedido de revisão para `APPROVAL_EMAIL` e pausa no nó **Wait**.
-
-Somente após aprovação explícita o HTTP Request para a WAHA é executado.
+Ação com efeito externo. O destino e o texto são preparados pelo agente, porém a WAHA só recebe a chamada depois da aprovação humana.
 
 ## `criar_evento(data, titulo)`
 
-**Tipo:** escrita controlada.
-
-Cria um evento no calendário principal. O prompt obriga o agente a pedir esclarecimento quando data/hora ou título forem ambíguos.
+Cria um evento no calendário principal. O agente deve solicitar esclarecimento quando data, horário ou título forem ambíguos.
 
 ---
 
 # Dois agentes: execução + QA
 
-Este projeto preserva o diferencial dual-agent do LeadFlow.
+### Agente Orquestrador
 
-### Agente 1 — Orquestrador
+Responsável por compreender a intenção, escolher ferramentas, preencher parâmetros de Function Calling e produzir a resposta preliminar.
 
-Responsável por:
+### Agente QA Validador
 
-- compreender a intenção;
-- selecionar a ferramenta apropriada;
-- preencher parâmetros com Function Calling;
-- consumir o resultado retornado pela ferramenta;
-- produzir uma resposta preliminar.
+Não possui tools destrutivas. Recebe pedido original, resposta preliminar e tool calls observáveis para verificar:
 
-### Agente 2 — QA Validador
+- aderência ao pedido;
+- clareza;
+- consistência com resultados reais;
+- ausência de alegações de execução não confirmadas;
+- respeito ao Human-in-the-loop.
 
-Não possui ferramentas e não consegue executar ações.
-
-Ele recebe:
-
-- pedido original;
-- resposta do Agente Orquestrador;
-- tool calls observáveis.
-
-E verifica:
-
-- aderência ao que foi pedido;
-- se o agente alegou executar algo que não foi confirmado;
-- clareza da resposta;
-- respeito ao Human-in-the-loop;
-- consistência entre resultado de ferramenta e resposta final.
-
-Essa separação aplica ao fluxo de IA um conceito comum de QA: **quem executa não é o mesmo componente que valida**.
+A ideia de projeto é simples: **quem executa não é o mesmo componente que valida**.
 
 ---
 
-# Segurança e Qualidade
+# Segurança e qualidade
 
 ## Human-in-the-loop
 
-O maior risco de um agente com Function Calling não é apenas responder errado; é **agir errado**.
-
-Por isso duas ações são classificadas como críticas:
-
 | Tool | Risco | Controle |
 | --- | --- | --- |
-| `apagar_email` | perda permanente de informação | aprovação humana + `Wait` |
+| `apagar_email` | perda de informação | aprovação humana + `Wait` |
 | `enviar_whatsapp` | comunicação externa indevida | aprovação humana + `Wait` |
 
-O fluxo permanece em estado `Waiting` até que a pessoa responsável escolha aprovar ou rejeitar.
+## Audit trail
 
-## Rastreabilidade
+O workflow registra nós explícitos para:
 
-O workflow possui nós explícitos:
+- input;
+- decisão observável do agente;
+- output;
+- pedido de exclusão;
+- pedido de envio de WhatsApp.
 
-- `Audit · Input`;
-- `Audit · Decisão do Agente`;
-- `Audit · Output`;
-- `Audit · Pedido apagar_email`;
-- `Audit · Pedido enviar_whatsapp`.
+A trilha registra fatos observáveis, parâmetros e resultados. **Não persiste raw chain-of-thought privado.**
 
-O n8n está configurado para salvar dados de execuções bem-sucedidas, manuais e com erro no PostgreSQL.
+## CI
 
-A trilha inclui **input, tool calls, parâmetros, observações, resumo de decisão, output, status e execution ID**.
+O GitHub Actions executa duas camadas.
 
-> O projeto deliberadamente **não persiste cadeia de pensamento privada/raw chain-of-thought**. Para auditoria são registrados apenas fatos observáveis e uma justificativa resumida de alto nível. Isso entrega rastreabilidade sem depender de conteúdo interno não apropriado para logs.
+### Validação estática
 
-## Estratégia de QA
+- JSON do workflow;
+- existência dos 5 contratos de tools;
+- dois agentes;
+- dois gates `Wait`;
+- sintaxe do Compose;
+- sintaxe do bootstrap PowerShell;
+- binding localhost;
+- regressões básicas de segredo;
+- garantia de que `ollama-init` não volte ao Compose.
 
-O CI verifica automaticamente:
+### Smoke test Docker real
 
-1. sintaxe JSON do workflow;
-2. existência dos 5 contratos de tools;
-3. presença dos dois agentes;
-4. presença dos dois nós `Wait` obrigatórios;
-5. uso de subworkflow para as ações críticas;
-6. sintaxe do Docker Compose;
-7. binding local das interfaces administrativas;
-8. padrões básicos de vazamento de segredos.
+O CI também sobe de verdade:
 
-### Cenários mínimos de aceitação
+```text
+PostgreSQL + Ollama + n8n
+```
 
-| Cenário | Resultado esperado |
-| --- | --- |
-| listar e-mails | tool `ler_email`, sem aprovação |
-| resumir e-mail conhecido | `resumir_email`, sem alteração da mensagem |
-| apagar sem ID | agente solicita ID antes de agir |
-| apagar com ID | execução entra em `Waiting` |
-| rejeitar exclusão | mensagem permanece intacta |
-| aprovar exclusão | delete ocorre somente após retomada |
-| enviar WhatsApp | execução entra em `Waiting` |
-| rejeitar WhatsApp | nenhum HTTP request de envio é realizado |
-| criar evento com data ambígua | agente pede esclarecimento |
-| resposta inconsistente | Agente QA corrige antes da resposta final |
+Depois aguarda e verifica:
+
+- API do Ollama;
+- `ollama list` dentro do container;
+- `/healthz` do n8n;
+- estado final do Compose.
+
+Isso reduz o risco de um arquivo sintaticamente válido quebrar apenas no primeiro boot.
 
 ---
 
-# Instalação
+# Configuração das credenciais no n8n
 
-## Requisitos mínimos
-
-- Windows 10/11, Linux ou macOS 64-bit;
-- Docker Desktop / Docker Engine com Compose v2;
-- 8 GB RAM mínimo; 16 GB recomendado;
-- aproximadamente 10 GB livres para imagens, volumes e modelo local;
-- internet na primeira instalação;
-- conta Gmail e Google Calendar para testar as respectivas tools;
-- uma conta WhatsApp para pareamento com WAHA.
-
-## Windows — forma recomendada
-
-1. Baixe o projeto em **Code → Download ZIP**.
-2. Extraia a pasta.
-3. Abra o Docker Desktop.
-4. Dê duplo clique em:
-
-```text
-INICIAR_WINDOWS.bat
-```
-
-O script:
-
-- verifica Docker;
-- cria `.env` quando necessário;
-- gera segredos locais aleatórios;
-- valida o Compose;
-- inicia PostgreSQL, Ollama, WAHA e n8n;
-- baixa a LLM local;
-- aguarda o health check;
-- importa `n8n-agent-workflow.json`;
-- abre n8n e WAHA.
-
-## Execução manual
-
-```bash
-cp .env.example .env
-# edite .env e troque os CHANGE_ME
-
-docker compose config
-docker compose up -d
-```
-
-Depois importe:
-
-```bash
-docker compose exec -T n8n n8n import:workflow --input=/files/n8n-agent-workflow.json
-```
-
-Abra:
-
-```text
-n8n: http://127.0.0.1:5678
-WAHA: http://127.0.0.1:3000/dashboard
-Ollama API: http://127.0.0.1:11434
-```
-
----
-
-# Configuração inicial no n8n
-
-As credenciais pessoais **não são versionadas**.
-
-## 1. Ollama
+## Ollama
 
 Crie uma credencial **Ollama API**:
 
@@ -319,14 +333,14 @@ Crie uma credencial **Ollama API**:
 Base URL: http://ollama:11434
 ```
 
-Atribua a credencial aos nós:
+Associe a:
 
 - `Ollama · Modelo Executor`;
 - `Ollama · Modelo Validador`.
 
-## 2. Gmail
+## Gmail
 
-Crie/conecte sua credencial Gmail OAuth2 e selecione-a em:
+Conecte Gmail OAuth2 a:
 
 - `ler_email`;
 - `resumir_email`;
@@ -334,51 +348,71 @@ Crie/conecte sua credencial Gmail OAuth2 e selecione-a em:
 - `Gmail · Apagar Email`;
 - `Solicitar aprovação · enviar_whatsapp`.
 
-## 3. Google Calendar
+## Google Calendar
 
 Conecte Google Calendar OAuth2 ao nó `criar_evento`.
 
-## 4. WhatsApp / WAHA
+## WhatsApp
 
-Abra o dashboard WAHA, inicie a sessão `default` e escaneie o QR Code.
+Abra:
 
-O Compose já direciona eventos `message` para:
+```text
+http://127.0.0.1:3000/dashboard
+```
+
+Inicie/abra a sessão `default` e escaneie o QR Code.
+
+O webhook configurado é:
 
 ```text
 http://n8n:5678/webhook/sistema-agentico/waha
 ```
 
-## 5. Aprovação humana
-
-No `.env`, defina:
-
-```env
-APPROVAL_EMAIL=seu-email@gmail.com
-```
-
-Esse endereço recebe os links de aprovação/rejeição das tools críticas.
-
 ---
 
 # Como testar com segurança
 
-Antes de ativar o webhook do WhatsApp:
+Antes de ativar o workflow em produção local:
 
-1. abra o workflow no n8n;
-2. selecione todas as credenciais;
-3. use **Chat de Teste**;
-4. teste primeiro `ler_email`;
-5. teste `criar_evento` com um evento descartável;
-6. teste `apagar_email` com uma mensagem sem importância e **rejeite** a primeira aprovação;
-7. confirme que a execução ficou em `Waiting`;
-8. teste `enviar_whatsapp` para o seu próprio número e rejeite;
-9. somente depois valide os caminhos aprovados;
-10. ative o workflow.
+1. configure as credenciais;
+2. use o Chat de Teste;
+3. teste `ler_email`;
+4. teste `resumir_email`;
+5. crie um evento descartável;
+6. solicite exclusão de um e-mail sem importância e **rejeite primeiro**;
+7. confirme o estado `Waiting`;
+8. teste WhatsApp para o próprio número e rejeite primeiro;
+9. valide depois os caminhos aprovados;
+10. só então ative o webhook.
 
-Para diagnóstico no Windows:
+O plano completo de QA está em [`docs/QA_TEST_PLAN.md`](docs/QA_TEST_PLAN.md).
+
+---
+
+# Execução manual
+
+Para quem prefere não usar o bootstrap:
+
+```bash
+cp .env.example .env
+# troque os CHANGE_ME
+
+docker compose config
+docker compose up -d postgres ollama
+
+docker compose exec -T ollama ollama pull qwen3:4b
+
+docker compose up -d n8n waha
+
+docker compose exec -T n8n n8n import:workflow --input=/files/n8n-agent-workflow.json
+```
+
+Acesse:
 
 ```text
-DIAGNOSTICO_WINDOWS.bat
+n8n:       http://127.0.0.1:5678
+WAHA:      http://127.0.0.1:3000/dashboard
+Ollama API:http://127.0.0.1:11434
 ```
 
 ---
@@ -387,26 +421,22 @@ DIAGNOSTICO_WINDOWS.bat
 
 **[▶ Abrir demonstração no navegador](https://htmlpreview.github.io/?https://github.com/berger33/leadflow-local-first/blob/main/demo/index.html)**
 
-A demo foi desenhada para recrutamento e não contém credenciais reais. Ela permite navegar pelo comportamento do sistema e simular:
-
-- escolha de tool;
-- parâmetros de Function Calling;
-- dual-agent;
-- estado `Waiting`;
-- aprovação e rejeição humana;
-- audit trail.
-
-Ações reais em Gmail, Calendar e WhatsApp ficam restritas à instalação local do usuário.
+A demo usa dados simulados e permite experimentar escolha de tool, parâmetros de Function Calling, dual-agent, estado `Waiting`, aprovação/rejeição e audit trail sem acessar Gmail, Calendar ou WhatsApp de terceiros.
 
 ---
 
-# Estrutura do repositório
+# Estrutura
 
 ```text
 sistema-agentico-n8n-whatsapp-email/
 ├── .github/workflows/ci.yml
 ├── demo/
 │   └── index.html
+├── docs/
+│   ├── CREDENTIALS_SETUP.md
+│   └── QA_TEST_PLAN.md
+├── scripts/
+│   └── bootstrap.ps1
 ├── .env.example
 ├── .gitignore
 ├── docker-compose.yml
@@ -424,39 +454,29 @@ sistema-agentico-n8n-whatsapp-email/
 
 # Decisões de engenharia
 
-### Por que n8n no centro?
+**Por que n8n no centro?** O problema é de orquestração, integrações, pausa/retomada e auditabilidade visual.
 
-Porque o problema é essencialmente de **orquestração de ferramentas e processos**. n8n torna as integrações auditáveis visualmente e oferece execução, persistência, pausa, retomada e tratamento operacional no mesmo ambiente.
+**Por que Ollama?** Mantém a inferência principal local e evita uma API paga obrigatória para o agente.
 
-### Por que LLM local?
+**Por que PostgreSQL?** Persiste estado, histórico e execuções pausadas aguardando aprovação.
 
-Ollama mantém a inferência principal no computador do usuário e evita obrigar o projeto a depender de uma API paga para demonstrar Function Calling.
+**Por que segundo agente?** O componente que toma uma decisão não deve ser o único responsável por validar sua própria saída.
 
-### Por que PostgreSQL?
-
-O banco persiste o estado do n8n e o histórico de execuções, inclusive fluxos pausados aguardando aprovação.
-
-### Por que um segundo agente?
-
-Porque confiança não deve depender apenas do componente que tomou a decisão. O validador cria um **segundo ponto de controle** antes da resposta final.
-
-### Por que aprovação humana mesmo com segundo agente?
-
-Validação por outra LLM reduz alguns erros, mas **não substitui autorização humana** quando a ação é irreversível ou envia conteúdo para terceiros.
+**Por que aprovação humana mesmo com QA?** Outra LLM pode reduzir erros, mas não substitui autorização para ações irreversíveis ou comunicação com terceiros.
 
 ---
 
 # Tecnologias
 
-`n8n Advanced AI` · `Function Calling` · `Ollama` · `Qwen3` · `WAHA` · `WhatsApp` · `Gmail` · `Google Calendar` · `PostgreSQL` · `Docker Compose` · `Human-in-the-loop` · `GitHub Actions` · `QA` · `Audit Trail`
+`n8n Advanced AI` · `Function Calling` · `Ollama` · `Qwen3` · `WAHA` · `WhatsApp` · `Gmail` · `Google Calendar` · `PostgreSQL` · `Docker Compose` · `PowerShell` · `Human-in-the-loop` · `GitHub Actions` · `QA` · `Audit Trail`
 
 ---
 
 ## Status
 
-**Versão 2.0 — Sistema Agêntico n8n WhatsApp+Email**
+**Versão 2.1 — bootstrap autorreparável**
 
-O código e a infraestrutura estão preparados para execução local reproduzível. A primeira instalação exige apenas a autorização das credenciais pertencentes ao próprio usuário (Gmail/Calendar), o pareamento do WhatsApp e a seleção da credencial Ollama local no n8n.
+A infraestrutura local é preparada automaticamente. Integrações que representam identidade do usuário continuam exigindo OAuth/QR Code por segurança.
 
 ## Autor
 
