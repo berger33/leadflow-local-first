@@ -60,7 +60,7 @@ jobs:
           sed -i 's/CHANGE_ME_64_CHARS_OR_MORE/test-encryption-key-012345678901234567890123456789/' .env
           sed -i 's/CHANGE_ME_32_CHARS_OR_MORE/test-waha-api-key-01234567890123456789/' .env
           sed -i 's/CHANGE_ME_STRONG_PASSWORD/test-dashboard-password/' .env
-          sed -i 's/seu-email@gmail.com/ci@example.com/' .env
+          echo 'APPROVAL_EMAIL=ci@example.com' >> .env
 
       - name: Validate Docker Compose syntax
         run: docker compose config --quiet
@@ -80,6 +80,14 @@ jobs:
             exit 1
           }
           Write-Host 'bootstrap.ps1 syntax: OK'
+
+      - name: Validate first-run bootstrap contract
+        run: |
+          grep -q 'showSetupOnFirstLoad' scripts/bootstrap.ps1
+          grep -q "docker compose up -d postgres ollama" scripts/bootstrap.ps1
+          grep -q "docker compose up -d n8n waha" scripts/bootstrap.ps1
+          grep -q 'ollama pull' scripts/bootstrap.ps1
+          grep -q 'import:workflow' scripts/bootstrap.ps1
 
       - name: Security regression checks
         run: |
@@ -103,7 +111,7 @@ jobs:
           sed -i 's/CHANGE_ME_64_CHARS_OR_MORE/test-encryption-key-012345678901234567890123456789/' .env
           sed -i 's/CHANGE_ME_32_CHARS_OR_MORE/test-waha-api-key-01234567890123456789/' .env
           sed -i 's/CHANGE_ME_STRONG_PASSWORD/test-dashboard-password/' .env
-          sed -i 's/seu-email@gmail.com/ci@example.com/' .env
+          echo 'APPROVAL_EMAIL=ci@example.com' >> .env
 
       - name: Start core containers
         run: docker compose up -d postgres ollama n8n
@@ -134,6 +142,17 @@ jobs:
           done
           docker compose logs n8n
           exit 1
+
+      - name: Validate n8n first-run settings endpoint
+        run: |
+          curl -fsS http://127.0.0.1:5678/rest/settings > /tmp/n8n-settings.json
+          python - <<'PY'
+          import json
+          data = json.load(open('/tmp/n8n-settings.json', encoding='utf-8'))
+          value = data['data']['userManagement']['showSetupOnFirstLoad']
+          assert isinstance(value, bool), value
+          print('n8n showSetupOnFirstLoad contract: OK ->', value)
+          PY
 
       - name: Show final service state
         run: docker compose ps
