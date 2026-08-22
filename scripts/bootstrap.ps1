@@ -152,13 +152,16 @@ function Ensure-OllamaModel([string]$Model) {
         Write-Host "Baixando $Model (tentativa $attempt/3)..."
         & docker compose exec -T ollama ollama pull $Model
         if ($LASTEXITCODE -eq 0) {
-            Write-Ok "Modelo $Model instalado."
-            return
+            & docker compose exec -T ollama ollama show $Model *> $null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Ok "Modelo $Model instalado e validado."
+                return
+            }
         }
         if ($attempt -lt 3) { Start-Sleep -Seconds 5 }
     }
 
-    throw "Nao foi possivel baixar o modelo $Model apos 3 tentativas. Verifique internet, espaco em disco e os logs do Ollama."
+    throw "Nao foi possivel baixar/validar o modelo $Model apos 3 tentativas. Verifique internet, espaco em disco e os logs do Ollama."
 }
 
 function Test-N8nNeedsOwner {
@@ -217,7 +220,12 @@ function Import-WorkflowIfNeeded {
         }
         throw 'n8n iniciou, mas a importacao automatica do workflow falhou. Consulte a mensagem acima.'
     }
-    Write-Ok 'Workflow principal importado.'
+
+    $verified = (& docker compose exec -T n8n n8n list:workflow 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0 -or $verified -notlike "*$workflowName*") {
+        throw 'A CLI informou importacao concluida, mas o workflow nao apareceu na verificacao final.'
+    }
+    Write-Ok 'Workflow principal importado e verificado.'
 }
 
 try {
@@ -283,11 +291,11 @@ try {
     }
     Write-Ok 'n8n pronto.'
 
-    if (Wait-Http 'http://127.0.0.1:3000/health' 60 2) {
-        Write-Ok 'WAHA pronto.'
-    } else {
-        Write-Warn 'WAHA ainda nao respondeu ao health check. O n8n e o Ollama estao ativos; consulte o diagnostico se o dashboard nao abrir.'
+    if (-not (Wait-Http 'http://127.0.0.1:3000/health' 60 2)) {
+        & docker compose logs --tail=100 waha
+        throw 'WAHA nao respondeu ao health check. O bootstrap foi interrompido para nao reportar sucesso parcial.'
     }
+    Write-Ok 'WAHA pronto.'
 
     Ensure-N8nOwner
     Import-WorkflowIfNeeded
@@ -304,7 +312,8 @@ try {
     Write-Host '============================================================' -ForegroundColor Green
     Write-Host ' BOOTSTRAP CONCLUIDO' -ForegroundColor Green
     Write-Host '============================================================' -ForegroundColor Green
-    Write-Host 'Configurado automaticamente: Docker, banco, segredos locais, Ollama, modelos, n8n, WAHA e importacao do workflow.'
+    Write-Host 'Validado: PostgreSQL, Ollama, modelo local, n8n, WAHA e workflow importado.'
+    Write-Host 'Segredos internos foram gerados automaticamente quando necessario.'
     Write-Host ''
     Write-Host 'Restam apenas integracoes vinculadas a identidade/consentimento do usuario:' -ForegroundColor Yellow
     Write-Host '  1. No workflow, crie a conexao Ollama API com Base URL http://ollama:11434 e associe aos 2 nos de modelo.'
