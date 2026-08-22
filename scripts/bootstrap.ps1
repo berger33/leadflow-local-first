@@ -169,6 +169,42 @@ function Ensure-OllamaModel([string]$Model) {
     throw "Nao foi possivel baixar o modelo $Model apos 3 tentativas. Verifique internet, espaco em disco e os logs do Ollama."
 }
 
+function Test-N8nNeedsOwner {
+    try {
+        $settings = Invoke-RestMethod -Uri 'http://127.0.0.1:5678/rest/settings' -Method Get -TimeoutSec 8
+        if ($null -eq $settings -or $null -eq $settings.data -or $null -eq $settings.data.userManagement) {
+            return $false
+        }
+        return [bool]$settings.data.userManagement.showSetupOnFirstLoad
+    } catch {
+        return $false
+    }
+}
+
+function Ensure-N8nOwner {
+    Write-Step 'Verificando cadastro local do n8n'
+    if (-not (Test-N8nNeedsOwner)) {
+        Write-Ok 'Proprietario local do n8n ja configurado.'
+        return
+    }
+
+    Write-Warn 'Esta e uma instalacao nova do n8n. O primeiro proprietario local precisa ser criado uma unica vez.'
+    Write-Host 'Nenhuma chave externa e solicitada nesta etapa; trata-se apenas do login local do seu n8n.'
+    Start-Process 'http://127.0.0.1:5678'
+    Write-Host ''
+    Read-Host 'Conclua o cadastro do proprietario na pagina que abriu e pressione ENTER aqui para continuar' | Out-Null
+
+    for ($i = 1; $i -le 30; $i++) {
+        if (-not (Test-N8nNeedsOwner)) {
+            Write-Ok 'Proprietario local do n8n confirmado.'
+            return
+        }
+        Start-Sleep -Seconds 2
+    }
+
+    throw 'O cadastro inicial do n8n ainda nao foi concluido. Finalize o formulario aberto no navegador e execute novamente.'
+}
+
 function Import-WorkflowIfNeeded {
     Write-Step 'Verificando workflow n8n'
     $workflowName = 'Sistema Agêntico n8n WhatsApp+Email'
@@ -180,9 +216,14 @@ function Import-WorkflowIfNeeded {
         return
     }
 
-    & docker compose exec -T n8n n8n import:workflow --input=/files/n8n-agent-workflow.json
-    if ($LASTEXITCODE -ne 0) {
-        throw 'n8n iniciou, mas a importacao automatica do workflow falhou.'
+    $importOutput = (& docker compose exec -T n8n n8n import:workflow --input=/files/n8n-agent-workflow.json 2>&1 | Out-String)
+    $importExit = $LASTEXITCODE
+    if ($importExit -ne 0) {
+        Write-Host $importOutput
+        if ($importOutput -match 'Failed to find owner') {
+            throw 'O n8n ainda nao possui proprietario local. Conclua o cadastro inicial e execute novamente.'
+        }
+        throw 'n8n iniciou, mas a importacao automatica do workflow falhou. Consulte a mensagem acima.'
     }
     Write-Ok 'Workflow principal importado.'
 }
@@ -250,6 +291,7 @@ try {
         Write-Warn 'WAHA ainda nao respondeu ao health check. O n8n e o Ollama estao ativos; consulte o diagnostico se o dashboard nao abrir.'
     }
 
+    Ensure-N8nOwner
     Import-WorkflowIfNeeded
 
     Write-Step 'Estado final dos servicos'
@@ -266,12 +308,11 @@ try {
     Write-Host '============================================================' -ForegroundColor Green
     Write-Host 'Configurado automaticamente: Docker, banco, segredos locais, Ollama, modelos, n8n, WAHA e importacao do workflow.'
     Write-Host ''
-    Write-Host 'Acoes externas exigem apenas autorizacoes que nao podem ser fabricadas pelo instalador:' -ForegroundColor Yellow
-    Write-Host '  1. n8n: crie o usuario administrador local na primeira abertura.'
-    Write-Host '  2. Ollama no n8n: crie a credencial com Base URL http://ollama:11434 e associe aos 2 nos de modelo.'
-    Write-Host '  3. Gmail/Calendar: autorize sua conta Google via OAuth2 nos respectivos nos.'
-    Write-Host '  4. WhatsApp: abra o WAHA e escaneie o QR Code da sessao default.'
-    Write-Host 'Essas etapas envolvem identidade/consentimento e por seguranca nao sao gravadas no GitHub.'
+    Write-Host 'Restam apenas integracoes vinculadas a identidade/consentimento do usuario:' -ForegroundColor Yellow
+    Write-Host '  1. No workflow, crie a conexao Ollama API com Base URL http://ollama:11434 e associe aos 2 nos de modelo.'
+    Write-Host '  2. Gmail/Calendar: autorize sua conta Google via OAuth2 nos respectivos nos.'
+    Write-Host '  3. WhatsApp: abra o WAHA e escaneie o QR Code da sessao default.'
+    Write-Host 'O instalador nunca salva tokens Google, cookies ou QR Codes no GitHub.'
     exit 0
 } catch {
     Write-Host ''
