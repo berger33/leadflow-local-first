@@ -21,10 +21,10 @@ function Write-Warn([string]$Message) {
 }
 
 function Invoke-Compose {
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Args)
-    & docker compose @Args
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$ComposeArgs)
+    & docker compose @ComposeArgs
     if ($LASTEXITCODE -ne 0) {
-        throw "docker compose $($Args -join ' ') falhou com codigo $LASTEXITCODE."
+        throw "docker compose $($ComposeArgs -join ' ') falhou com codigo $LASTEXITCODE."
     }
 }
 
@@ -128,7 +128,7 @@ function Wait-Http([string]$Url, [int]$Attempts = 60, [int]$DelaySeconds = 2) {
     for ($i = 1; $i -le $Attempts; $i++) {
         try {
             $response = Invoke-WebRequest -UseBasicParsing -Uri $Url -TimeoutSec 5
-            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 500) { return $true }
+            if ($response.StatusCode -ge 200 -and $response.StatusCode -lt 400) { return $true }
         } catch {
             Start-Sleep -Seconds $DelaySeconds
             continue
@@ -138,9 +138,9 @@ function Wait-Http([string]$Url, [int]$Attempts = 60, [int]$DelaySeconds = 2) {
     return $false
 }
 
-function Wait-Postgres {
+function Wait-Postgres([string]$User, [string]$Database) {
     for ($i = 1; $i -le 40; $i++) {
-        & docker compose exec -T postgres pg_isready -U n8n -d n8n *> $null
+        & docker compose exec -T postgres pg_isready -U $User -d $Database *> $null
         if ($LASTEXITCODE -eq 0) { return $true }
         Start-Sleep -Seconds 2
     }
@@ -211,10 +211,14 @@ try {
 
     Remove-LegacyContainers
 
+    $envMap = Get-EnvMap
+    $pgUser = if ($envMap.ContainsKey('POSTGRES_USER') -and $envMap['POSTGRES_USER']) { $envMap['POSTGRES_USER'] } else { 'n8n' }
+    $pgDatabase = if ($envMap.ContainsKey('POSTGRES_DB') -and $envMap['POSTGRES_DB']) { $envMap['POSTGRES_DB'] } else { 'n8n' }
+
     Write-Step 'Iniciando PostgreSQL e Ollama'
     Invoke-Compose up -d postgres ollama
 
-    if (-not (Wait-Postgres)) {
+    if (-not (Wait-Postgres $pgUser $pgDatabase)) {
         & docker compose logs --tail=80 postgres
         throw 'PostgreSQL nao ficou pronto dentro do tempo esperado.'
     }
@@ -226,7 +230,6 @@ try {
     }
     Write-Ok 'Ollama pronto.'
 
-    $envMap = Get-EnvMap
     $mainModel = if ($envMap.ContainsKey('OLLAMA_MODEL') -and $envMap['OLLAMA_MODEL']) { $envMap['OLLAMA_MODEL'] } else { 'qwen3:4b' }
     $validatorModel = if ($envMap.ContainsKey('OLLAMA_VALIDATOR_MODEL') -and $envMap['OLLAMA_VALIDATOR_MODEL']) { $envMap['OLLAMA_VALIDATOR_MODEL'] } else { $mainModel }
     Ensure-OllamaModel $mainModel
@@ -274,7 +277,9 @@ try {
     Write-Host ''
     Write-Host "[ERRO] $($_.Exception.Message)" -ForegroundColor Red
     Write-Host 'Executando diagnostico resumido...' -ForegroundColor Yellow
-    & docker compose ps 2>$null
+    if (Get-Command docker -ErrorAction SilentlyContinue) {
+        & docker compose ps 2>$null
+    }
     Write-Host ''
     Write-Host 'Para detalhes, execute DIAGNOSTICO_WINDOWS.bat.' -ForegroundColor Yellow
     exit 1
