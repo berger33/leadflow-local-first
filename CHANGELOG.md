@@ -11,7 +11,10 @@ Release focada em **confiabilidade da primeira execução no Windows**.
 - removidos `container_name` fixos para reduzir conflitos entre downloads/pastas diferentes;
 - definido nome de projeto Compose estável (`sistema-agentico`);
 - volumes receberam nomes estáveis para persistência previsível;
-- script de importação deixou de tentar iniciar uma stack quebrada de forma independente.
+- script de importação deixou de tentar iniciar uma stack quebrada de forma independente;
+- bootstrap agora detecta uma instalação nova do n8n antes de importar o workflow;
+- quando o primeiro proprietário local ainda não existe, o instalador abre a tela de cadastro, espera a conclusão e só então continua;
+- removida ambiguidade de passagem do argumento `-d` no Windows PowerShell 5.1/7 ao chamar Docker Compose.
 
 ### Bootstrap inteligente
 
@@ -22,6 +25,7 @@ Release focada em **confiabilidade da primeira execução no Windows**.
 - health checks reais antes de avançar;
 - verificação do modelo Ollama antes do download;
 - até três tentativas de download do modelo;
+- detecção de `showSetupOnFirstLoad` do n8n;
 - importação idempotente do workflow para evitar duplicatas;
 - solicitação do e-mail de aprovação somente quando ainda não configurado;
 - diagnóstico final e mensagens de erro direcionadas.
