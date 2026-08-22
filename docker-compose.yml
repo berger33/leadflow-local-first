@@ -1,7 +1,8 @@
+name: sistema-agentico
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: sistema-agentico-postgres
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-n8n}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -12,12 +13,12 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-n8n} -d ${POSTGRES_DB:-n8n}"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 30
+      start_period: 5s
     restart: unless-stopped
 
   ollama:
     image: ollama/ollama:0.32.6
-    container_name: sistema-agentico-ollama
     ports:
       - "127.0.0.1:11434:11434"
     volumes:
@@ -26,30 +27,12 @@ services:
       test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
-      retries: 20
+      retries: 30
       start_period: 10s
     restart: unless-stopped
 
-  ollama-init:
-    image: ollama/ollama:0.32.6
-    container_name: sistema-agentico-ollama-init
-    depends_on:
-      ollama:
-        condition: service_healthy
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - >
-        ollama pull ${OLLAMA_MODEL:-qwen3:4b} &&
-        if [ "${OLLAMA_VALIDATOR_MODEL:-qwen3:4b}" != "${OLLAMA_MODEL:-qwen3:4b}" ]; then
-          ollama pull ${OLLAMA_VALIDATOR_MODEL:-qwen3:4b};
-        fi
-    restart: "no"
-
   waha:
     image: devlikeapro/waha:latest-2026.7.2
-    container_name: sistema-agentico-waha
     environment:
       WAHA_API_KEY: ${WAHA_API_KEY}
       WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME:-admin}
@@ -68,14 +51,9 @@ services:
 
   n8n:
     image: n8nio/n8n:2.33.5
-    container_name: sistema-agentico-n8n
     depends_on:
       postgres:
         condition: service_healthy
-      ollama-init:
-        condition: service_completed_successfully
-      waha:
-        condition: service_started
     environment:
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
@@ -99,7 +77,7 @@ services:
       WAHA_BASE_URL: http://waha:3000
       WAHA_API_KEY: ${WAHA_API_KEY}
       WAHA_SESSION: ${WAHA_SESSION:-default}
-      APPROVAL_EMAIL: ${APPROVAL_EMAIL}
+      APPROVAL_EMAIL: ${APPROVAL_EMAIL:-}
     ports:
       - "127.0.0.1:5678:5678"
     volumes:
@@ -109,6 +87,10 @@ services:
 
 volumes:
   postgres_data:
+    name: sistema-agentico-postgres-data
   ollama_data:
+    name: sistema-agentico-ollama-data
   waha_sessions:
+    name: sistema-agentico-waha-sessions
   n8n_data:
+    name: sistema-agentico-n8n-data
