@@ -104,6 +104,7 @@ function Get-StatusObject {
         workflow = (Test-Workflow)
         needsOwner = (Test-N8nNeedsOwner)
         setupComplete = (Test-Path '.setup-complete')
+        googleConfigured = [bool]($envMap.ContainsKey('GOOGLE_CLIENT_ID') -and $envMap['GOOGLE_CLIENT_ID'] -and $envMap.ContainsKey('GOOGLE_CLIENT_SECRET') -and $envMap['GOOGLE_CLIENT_SECRET'])
         wahaUser = if ($envMap.ContainsKey('WAHA_DASHBOARD_USERNAME')) { $envMap['WAHA_DASHBOARD_USERNAME'] } else { 'admin' }
         wahaPassword = if ($envMap.ContainsKey('WAHA_DASHBOARD_PASSWORD')) { $envMap['WAHA_DASHBOARD_PASSWORD'] } else { '' }
     }
@@ -121,6 +122,8 @@ function Write-Response($Response, [int]$StatusCode, [string]$ContentType, [stri
     $Response.ContentType = $ContentType
     $Response.ContentEncoding = [Text.Encoding]::UTF8
     $Response.Headers['Cache-Control'] = 'no-store'
+    $Response.Headers['X-Content-Type-Options'] = 'nosniff'
+    $Response.Headers['Content-Security-Policy'] = "default-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'"
     $Response.ContentLength64 = $bytes.Length
     $Response.OutputStream.Write($bytes, 0, $bytes.Length)
     $Response.OutputStream.Close()
@@ -192,6 +195,9 @@ try {
                     model = if ($envMap.ContainsKey('OLLAMA_MODEL')) { $envMap['OLLAMA_MODEL'] } else { 'qwen3:4b' }
                     validatorModel = if ($envMap.ContainsKey('OLLAMA_VALIDATOR_MODEL')) { $envMap['OLLAMA_VALIDATOR_MODEL'] } else { 'qwen3:4b' }
                     timezone = if ($envMap.ContainsKey('GENERIC_TIMEZONE')) { $envMap['GENERIC_TIMEZONE'] } else { 'America/Sao_Paulo' }
+                    googleClientId = if ($envMap.ContainsKey('GOOGLE_CLIENT_ID')) { $envMap['GOOGLE_CLIENT_ID'] } else { '' }
+                    googleClientSecret = if ($envMap.ContainsKey('GOOGLE_CLIENT_SECRET')) { $envMap['GOOGLE_CLIENT_SECRET'] } else { '' }
+                    googleCallback = 'http://localhost:5678/rest/oauth2-credential/callback'
                     wahaUser = if ($envMap.ContainsKey('WAHA_DASHBOARD_USERNAME')) { $envMap['WAHA_DASHBOARD_USERNAME'] } else { 'admin' }
                     wahaPassword = if ($envMap.ContainsKey('WAHA_DASHBOARD_PASSWORD')) { $envMap['WAHA_DASHBOARD_PASSWORD'] } else { '' }
                 }
@@ -206,17 +212,24 @@ try {
                 $model = [string]$data.model
                 $validator = [string]$data.validatorModel
                 $timezone = [string]$data.timezone
+                $googleClientId = if ($data.PSObject.Properties.Name -contains 'googleClientId') { [string]$data.googleClientId } else { '' }
+                $googleClientSecret = if ($data.PSObject.Properties.Name -contains 'googleClientSecret') { [string]$data.googleClientSecret } else { '' }
 
                 if ($email -and $email -notmatch '^[^\s@]+@[^\s@]+\.[^\s@]+$') { throw 'Informe um e-mail de aprovacao valido ou deixe o campo vazio.' }
                 if (-not (Validate-Model $model) -or -not (Validate-Model $validator)) { throw 'Nome de modelo Ollama invalido.' }
                 if ($timezone -notmatch '^[A-Za-z_]+/[A-Za-z_]+$' -and $timezone -ne 'UTC') { throw 'Fuso horario invalido.' }
+                if (($googleClientId -and -not $googleClientSecret) -or ($googleClientSecret -and -not $googleClientId)) { throw 'Para preparar Google automaticamente, informe Client ID e Client Secret juntos.' }
+                if ($googleClientId -and $googleClientId.Length -gt 512) { throw 'Google Client ID invalido.' }
+                if ($googleClientSecret -and $googleClientSecret.Length -gt 512) { throw 'Google Client Secret invalido.' }
 
                 Ensure-EnvFile
                 Set-EnvValue 'APPROVAL_EMAIL' $email
                 Set-EnvValue 'OLLAMA_MODEL' $model
                 Set-EnvValue 'OLLAMA_VALIDATOR_MODEL' $validator
                 Set-EnvValue 'GENERIC_TIMEZONE' $timezone
-                Write-Json $response 200 ([ordered]@{ ok = $true })
+                Set-EnvValue 'GOOGLE_CLIENT_ID' $googleClientId
+                Set-EnvValue 'GOOGLE_CLIENT_SECRET' $googleClientSecret
+                Write-Json $response 200 ([ordered]@{ ok = $true; googleConfigured = [bool]($googleClientId -and $googleClientSecret) })
                 continue
             }
 
@@ -225,8 +238,7 @@ try {
                 if ($result.code -ne 0) {
                     Write-Json $response 500 ([ordered]@{ error = 'A preparacao automatica falhou. Veja os detalhes tecnicos.'; log = $result.log; code = $result.code })
                 } else {
-                    $status = Get-StatusObject
-                    Write-Json $response 200 ([ordered]@{ ok = $true; log = $result.log; status = $status })
+                    Write-Json $response 200 ([ordered]@{ ok = $true; log = $result.log; status = (Get-StatusObject) })
                 }
                 continue
             }
