@@ -174,35 +174,47 @@ jobs:
         run: |
           for i in $(seq 1 90); do
             if curl -fsS http://127.0.0.1:5678/healthz >/dev/null; then
-              echo 'n8n: OK'; exit 0
+              echo 'n8n health: OK'; exit 0
             fi
             sleep 2
           done
           docker compose logs n8n
           exit 1
 
-      - name: Validate n8n first-run state
+      - name: Wait for n8n settings and validate first-run state
         run: |
-          curl -fsS http://127.0.0.1:5678/rest/settings > /tmp/n8n-settings-before.json
-          python - <<'PY'
-          import json
-          data=json.load(open('/tmp/n8n-settings-before.json', encoding='utf-8'))
-          assert data['data']['userManagement']['showSetupOnFirstLoad'] is True
-          print('n8n starts in owner-setup state: OK')
-          PY
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:5678/rest/settings -o /tmp/n8n-settings-before.json; then
+              if python -c "import json; d=json.load(open('/tmp/n8n-settings-before.json', encoding='utf-8')); assert d['data']['userManagement']['showSetupOnFirstLoad'] is True"; then
+                echo 'n8n starts in owner-setup state: OK'
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+          echo 'n8n settings did not become ready with owner setup enabled.'
+          cat /tmp/n8n-settings-before.json || true
+          docker compose logs n8n
+          exit 1
 
       - name: Create n8n owner through official local endpoint
         run: |
           curl -fsS -X POST http://127.0.0.1:5678/rest/owner/setup \
             -H 'Content-Type: application/json' \
             -d '{"email":"ci@example.com","firstName":"CI","lastName":"Setup","password":"CiPassword1"}' >/tmp/owner.json
-          curl -fsS http://127.0.0.1:5678/rest/settings > /tmp/n8n-settings-after.json
-          python - <<'PY'
-          import json
-          data=json.load(open('/tmp/n8n-settings-after.json', encoding='utf-8'))
-          assert data['data']['userManagement']['showSetupOnFirstLoad'] is False
-          print('n8n owner setup endpoint: OK')
-          PY
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:5678/rest/settings -o /tmp/n8n-settings-after.json; then
+              if python -c "import json; d=json.load(open('/tmp/n8n-settings-after.json', encoding='utf-8')); assert d['data']['userManagement']['showSetupOnFirstLoad'] is False"; then
+                echo 'n8n owner setup endpoint: OK'
+                exit 0
+              fi
+            fi
+            sleep 1
+          done
+          echo 'n8n did not confirm owner setup.'
+          cat /tmp/n8n-settings-after.json || true
+          docker compose logs n8n
+          exit 1
 
       - name: Validate bootstrap finalization end to end
         shell: pwsh
