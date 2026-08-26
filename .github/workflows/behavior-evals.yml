@@ -1,0 +1,24 @@
+name: Behavior Evals
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  behavior-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate versioned tool behavior
+        run: python scripts/validate_behavior_cases.py
+      - name: Validate eval JSON
+        run: python -m json.tool evals/behavior_cases.json >/dev/null
+      - name: Check whitespace
+        run: git diff --check
