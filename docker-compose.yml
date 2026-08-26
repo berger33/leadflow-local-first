@@ -37,7 +37,7 @@ services:
       WAHA_API_KEY: ${WAHA_API_KEY}
       WAHA_DASHBOARD_USERNAME: ${WAHA_DASHBOARD_USERNAME:-admin}
       WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD}
-      WAHA_API_KEY_EXCLUDE_PATH: health,ping
+      WHATSAPP_API_KEY_EXCLUDE_PATH: health,ping
       WHATSAPP_HOOK_URL: http://n8n:5678/webhook/sistema-agentico/waha
       WHATSAPP_HOOK_EVENTS: message
       WHATSAPP_HOOK_RETRIES_POLICY: linear
