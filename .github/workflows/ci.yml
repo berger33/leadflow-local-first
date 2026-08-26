@@ -216,6 +216,18 @@ jobs:
           docker compose logs n8n
           exit 1
 
+      - name: Wait for WAHA before finalization
+        run: |
+          for i in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null; then
+              echo 'WAHA health: OK'; exit 0
+            fi
+            sleep 2
+          done
+          echo 'WAHA did not become ready before bootstrap finalization.'
+          docker compose logs waha
+          exit 1
+
       - name: Validate bootstrap finalization end to end
         shell: pwsh
         run: |
@@ -229,17 +241,6 @@ jobs:
           test -f .setup-complete
           test ! -f setup/credentials.runtime.json
           test ! -f setup/workflow.runtime.json
-
-      - name: Wait for WAHA
-        run: |
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:3000/health >/dev/null; then
-              echo 'WAHA: OK'; exit 0
-            fi
-            sleep 2
-          done
-          docker compose logs waha
-          exit 1
 
       - name: Show final service state
         run: docker compose ps
